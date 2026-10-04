@@ -22,25 +22,32 @@ const NAMES = { ...SKIN, ...HAIR, ...EYE, ...GEAR, ...BG, auto: "おまかせ" }
 const PALETTES = { skin: Object.keys(SKIN), hair: Object.keys(HAIR), eyes: Object.keys(EYE), gear: ["auto", ...Object.keys(GEAR)], bg: Object.keys(BG) };
 
 const FACE = "M100 46 C130 46 148 66 148 94 C148 120 130 140 100 142 C70 140 52 120 52 94 C52 66 70 46 100 46Z";
-const BODY = "M100 140 C80 140 66 146 58 156 C50 166 47 182 46 200 L154 200 C153 182 150 166 142 156 C134 146 120 140 100 140Z";
+// The body is a torso with two arms, so clothes can have sleeves and held items can be
+// gripped by an arm that bends up from the shoulder.
+const TORSO = "M100 142 C86 142 75 146 70 154 C66 162 64 178 64 200 L136 200 C136 178 134 162 130 154 C125 146 114 142 100 142Z";
+const ARM = "M71 152 C60 152 52 158 48 168 C44 178 43 190 43 200 L67 200 C66 188 66 176 68 166 C69 160 70 156 71 152Z";   // left; the right is mirrored
+const SHOULDER = { L: [62, 162], R: [138, 162] };
 const NECK = "M91 128 L91 148 Q100 154 109 148 L109 128Z";
 const EX = [81, 119], EY = 102;
 
 const HEAD_BACK = "M52 96 C46 60 68 36 100 36 C132 36 154 60 148 96Z";
 const LONG_FRONT = "M50 104 C46 64 68 40 100 40 C132 40 154 64 150 104 C148 94 146 86 142 80 Q137 88 131 92 Q127 82 121 76 Q113 86 105 90 Q101 80 97 74 Q89 86 79 90 Q75 82 71 78 Q63 86 58 92 C54 96 52 100 50 104Z";
 const SPIKY_FRONT = "M50 100 C44 70 56 44 78 36 Q74 26 70 18 Q84 22 92 30 Q96 18 104 8 Q108 20 110 30 Q120 22 133 18 Q129 30 124 38 Q136 42 144 52 Q149 64 150 100 C147 92 143 85 139 80 Q135 88 132 96 Q128 84 123 76 Q119 86 115 94 Q111 82 107 72 Q103 84 99 92 Q95 82 91 72 Q87 84 83 92 Q79 84 75 76 Q71 86 67 96 Q65 88 61 82 C56 88 52 94 50 100Z";
+// Tapered strands that follow the flow of each fringe.
+const SPIKY_STRANDS = [[78, 46, 82, 62, 80, 80], [100, 26, 102, 50, 99, 82], [122, 44, 120, 62, 120, 80]];
+const LONG_STRANDS = [[86, 48, 80, 64, 74, 84], [100, 44, 101, 62, 100, 80], [114, 48, 120, 64, 126, 84]];
 const HAIRS = [
-  { id: "hero",  label: "ツンツン",     back: HEAD_BACK + " M60 96 L140 96 L140 120 L60 120Z", front: SPIKY_FRONT },
+  { id: "hero",  label: "ツンツン",     back: HEAD_BACK + " M60 96 L140 96 L140 120 L60 120Z", front: SPIKY_FRONT, strands: SPIKY_STRANDS },
   { id: "neat",  label: "さっぱり",      back: "M52 96 C46 62 68 38 100 38 C132 38 154 62 148 96 L144 112 L56 112Z",
                                      front: "M50 104 C46 66 66 40 100 40 C134 40 154 64 150 104 C148 94 146 86 142 80 C130 76 116 72 106 62 C100 70 86 78 70 80 C62 82 56 86 54 92 C52 96 51 100 50 104Z" },
-  { id: "long",  label: "ロング",      back: "M48 96 C44 56 70 36 100 36 C130 36 156 56 152 96 C154 130 158 160 162 186 L38 186 C42 160 46 130 48 96Z", front: LONG_FRONT,
+  { id: "long",  label: "ロング",      back: "M48 96 C44 56 70 36 100 36 C130 36 156 56 152 96 C154 130 158 160 162 186 L38 186 C42 160 46 130 48 96Z", front: LONG_FRONT, strands: LONG_STRANDS,
                                      locks: "M50 100 C48 118 50 138 54 158 L64 158 C60 138 58 118 58 98Z M150 100 C152 118 150 138 146 158 L136 158 C140 138 142 118 142 98Z" },
   { id: "bob",   label: "ボブ",       back: "M48 96 C44 58 70 38 100 38 C130 38 156 58 152 96 L154 132 C154 140 144 142 136 140 L64 140 C56 142 46 140 46 132Z",
                                      front: "M50 106 C46 66 68 40 100 40 C132 40 154 66 150 106 C149 98 148 90 146 84 Q138 90 130 84 Q122 90 114 84 Q106 90 100 84 Q94 90 86 84 Q78 90 70 84 Q62 90 54 84 C52 90 51 98 50 106Z" },
-  { id: "twin",  label: "ツインテール", back: HEAD_BACK + " M56 66 C30 70 20 118 28 172 C38 150 46 120 58 98Z M144 66 C170 70 180 118 172 172 C162 150 154 120 142 98Z", front: LONG_FRONT, ties: [[56, 68], [144, 68]] },
-  { id: "pony",  label: "ポニーテール",  back: HEAD_BACK + " M130 48 C164 44 174 90 166 130 C162 150 154 164 146 172 C150 146 150 118 142 96Z", front: LONG_FRONT, ties: [[134, 50]] },
-  { id: "bun",   label: "おだんご",       back: HEAD_BACK + " M100 18 a16 16 0 1 0 0.1 0Z", front: LONG_FRONT, ties: [[100, 36]] },
-  { id: "wild",  label: "ワイルド",      back: "M100 28 Q118 20 132 28 Q148 28 154 44 Q166 54 162 72 Q172 90 164 104 Q172 122 160 136 Q162 152 148 158 L52 158 Q38 152 40 136 Q28 122 36 104 Q28 90 38 72 Q34 54 46 44 Q52 28 68 28 Q82 20 100 28Z", front: SPIKY_FRONT },
+  { id: "twin",  label: "ツインテール", back: HEAD_BACK + " M56 66 C30 70 20 118 28 172 C38 150 46 120 58 98Z M144 66 C170 70 180 118 172 172 C162 150 154 120 142 98Z", front: LONG_FRONT, strands: LONG_STRANDS, ties: [[56, 68], [144, 68]] },
+  { id: "pony",  label: "ポニーテール",  back: HEAD_BACK + " M130 48 C164 44 174 90 166 130 C162 150 154 164 146 172 C150 146 150 118 142 96Z", front: LONG_FRONT, strands: LONG_STRANDS, ties: [[134, 50]] },
+  { id: "bun",   label: "おだんご",       back: HEAD_BACK + " M100 18 a16 16 0 1 0 0.1 0Z", front: LONG_FRONT, strands: LONG_STRANDS, ties: [[100, 36]] },
+  { id: "wild",  label: "ワイルド",      back: "M100 28 Q118 20 132 28 Q148 28 154 44 Q166 54 162 72 Q172 90 164 104 Q172 122 160 136 Q162 152 148 158 L52 158 Q38 152 40 136 Q28 122 36 104 Q28 90 38 72 Q34 54 46 44 Q52 28 68 28 Q82 20 100 28Z", front: SPIKY_FRONT, strands: SPIKY_STRANDS },
   { id: "bald",  label: "スキンヘッド",      shine: true },
 ];
 
@@ -48,7 +55,9 @@ const brow = (pts, br, t = 3) => both(T(pts, br, t));
 const animeEye = (e, x, { lid = 0, slant = 0, lash = 3.4 } = {}) => {
   const a = x.a;
   const d = e < 100 ? -1 : 1;   // -1 left eye, 1 right eye (outer side)
-  return E(e, EY, 8, 10, "#fff") + E(e, EY + 1, 6.4, 8.2, a) + E(e, EY + 5, 4.6, 3.6, lighten(a, .35)) + E(e, EY + 1, 3, 4.2, INK)
+  return E(e, EY, 8, 10, "#fff") + E(e, EY + 1, 6.4, 8.2, a)
+    + P(`M${e - 6.4} ${EY + 1} A6.4 8.2 0 0 1 ${e + 6.4} ${EY + 1} Q${e} ${EY - 2} ${e - 6.4} ${EY + 1}Z`, shade(a, .35))
+    + E(e, EY + 5, 4.6, 3.6, lighten(a, .35)) + E(e, EY + 1, 3, 4.2, INK)
     + C(e + 2.6, EY - 3.4, 2.5, "#fff") + C(e - 2.4, EY + 4.4, 1.2, "#fff")
     + (lid ? P(`M${e - 9} ${EY - 11} L${e + 9} ${EY - 11} L${e + 9} ${EY - 11 + lid} Q${e} ${EY - 13 + lid} ${e - 9} ${EY - 11 + lid}Z`, x.skin) : "")
     + T([e - 10 * d, EY - 6 - slant * d, e, EY - 13 + lid, e + 10 * d, EY - 7 + slant * d], INK, lash)
@@ -96,22 +105,82 @@ const EARS = [
   { id: "none",  label: "かくす", path: null },
 ];
 
-const vneck = (x, d = 160) => P(`M90 140 L100 ${d} L110 140Z`, x.skin);
+// Outfits. draw() paints the torso (clipped to it); sleeve() is the arm color (default: main);
+// arm() decorates a hanging left arm (mirrored for the right); shoulders() sits on top.
+const fold = (pts, c, t = 1.4) => T(pts, shade(c, .3), t, 'opacity=".45"');
+const rivet = (x, y, c) => C(x, y, 1.7, lighten(c, .45));
+const vest = (fill) => both(P("M70 154 C74 146 84 142 90 142 L97 200 L64 200 C64 180 66 164 70 154Z", fill));
+const chainmail = (c) => Array.from({ length: 7 }, (_, r) => Array.from({ length: 5 }, (_, k) =>
+  S(`M${42 + k * 6 + (r % 2) * 3} ${160 + r * 6} q3 3 6 0`, shade(c, .3), 1)).join("")).join("");
 const OUTFITS = [
-  { id: "hero",     label: "勇者",      auto: ["#3f6fd1", "#e8b84a"], draw: (x) => P(BODY, x.a) + vneck(x) + S("M90 140 L100 160 L110 140", x.b, 2.6) + `<rect x="40" y="184" width="120" height="8" fill="#8a5a3a"/><rect x="94" y="182" width="12" height="12" rx="2" fill="${x.b}"/>` },
-  { id: "knight",   label: "騎士",    auto: ["#b8c0cc", "#3f6fd1"], draw: (x) => P(BODY, shade(x.a, .15)) + P("M70 152 Q100 144 130 152 L126 192 Q100 200 74 192Z", lighten(x.a, .15)) + P("M100 160 L108 170 L100 184 L92 170Z", x.b) + both(`<ellipse cx="60" cy="160" rx="17" ry="12" transform="rotate(-24 60 160)" fill="${x.a}"/>`) + P("M86 140 Q100 148 114 140 L114 150 Q100 158 86 150Z", x.a) },
-  { id: "mage",     label: "魔法使い",      auto: ["#8a63d2", "#e8b84a"], draw: (x) => P(BODY, x.a) + P("M76 148 Q100 134 124 148 L120 162 Q100 154 80 162Z", shade(x.a, .2)) + S("M100 160 L100 200", shade(x.a, .3), 2) + C(100, 162, 4.4, x.b) + both(S("M64 176 Q70 184 66 196", lighten(x.a, .25), 1.6, 'opacity=".6"')) },
-  { id: "priest",   label: "僧侶",    auto: ["#f3f0e8", "#3f6fd1"], draw: (x) => P(BODY, x.a) + vneck(x, 154) + both(P("M86 142 L90 200 L98 200 L94 142Z", x.b)) + C(100, 172, 6, "#e8b84a") + C(100, 172, 2.6, x.a) },
-  { id: "thief",    label: "盗賊",     auto: ["#5f6f3a", "#8a5a3a"], draw: (x) => P(BODY, x.b) + both(P("M58 156 C66 146 80 142 88 142 L96 200 L46 200 C47 182 51 166 58 156Z", x.a)) + P("M78 142 Q100 158 122 142 L100 170Z", shade(x.a, .25)) },
-  { id: "ninja",    label: "忍者",     auto: ["#2a3f7a", "#3a3438"], draw: (x) => P(BODY, x.a) + P("M86 140 L108 182 L114 178 L94 140Z", x.b) + S("M114 140 L96 176", shade(x.a, .3), 2) + `<rect x="40" y="186" width="120" height="7" fill="${x.b}"/>` },
-  { id: "archer",   label: "弓使い",    auto: ["#4fa36f", "#8a5a3a"], draw: (x) => P(BODY, x.a) + vneck(x, 154) + S("M58 154 L144 198", x.b, 6) + `<rect x="66" y="176" width="14" height="12" rx="2" fill="${x.b}"/>` },
-  { id: "bard",     label: "吟遊詩人",      auto: ["#d9473a", "#ffffff"], draw: (x) => P(BODY, "#ffffff") + both(P("M58 156 C66 146 80 142 88 142 L96 200 L46 200 C47 182 51 166 58 156Z", x.a)) + P("M92 144 Q100 150 108 144 L106 152 Q100 158 94 152 L92 160 Q100 166 108 160 L104 170 Q100 174 96 170Z", x.b, `stroke="${shade(x.b, .2)}" stroke-width="1"`) },
-  { id: "alchemist", label: "錬金術師", auto: ["#8a5a3a", "#2ab3c9"], draw: (x) => P(BODY, "#f3f0e8") + both(P("M58 156 C66 146 80 142 88 142 L98 200 L46 200 C47 182 51 166 58 156Z", x.a) + P("M88 142 L98 200 L92 200 L82 160 L88 154 L80 148Z", shade(x.a, .2))) + `<rect x="118" y="170" width="14" height="18" rx="3" fill="${shade(x.a, .15)}"/>` + C(125, 168, 4.4, x.b) },
-  { id: "villager", label: "村人",      auto: ["#e8b84a", "#8a5a3a"], draw: (x) => P(BODY, x.a) + vneck(x, 156) + S("M94 146 L106 150 M94 151 L105 154 M95 156 L103 158", x.b, 1.6) +
-      P("M64 170 L136 170 L140 200 L60 200Z", "#f3f0e8") + S("M66 172 L70 146 M134 172 L130 146", "#f3f0e8", 4) + S("M64 170 L136 170", shade("#f3f0e8", .15), 1.4) +
-      `<rect x="88" y="180" width="24" height="13" rx="2" fill="${shade("#f3f0e8", .08)}"/>` },
-  { id: "demon",    label: "魔王", auto: ["#3a3438", "#d9473a"], draw: (x) => P(BODY, x.a) + both(P("M48 168 L58 140 L66 158 L74 144 L80 162Z", x.b)) + P("M86 142 Q100 156 114 142 L100 176Z", x.b) + C(100, 184, 4, "#e8b84a") },
-  { id: "princess", label: "姫",  auto: ["#f08fb5", "#e8b84a"], draw: (x) => P(BODY, x.a) + P("M78 150 Q88 144 100 152 Q112 144 122 150 L118 140 L82 140Z", x.skin) + S("M82 150 Q100 166 118 150", x.b, 1.6) + P("M100 160 L104 165 L100 170 L96 165Z", x.b) + both(S("M70 176 Q76 186 72 198", lighten(x.a, .3), 1.6, 'opacity=".7"')) },
+  { id: "hero", label: "勇者", auto: ["#3f6fd1", "#e8b84a"],
+    draw: (x) => P(TORSO, x.a) + P("M88 142 L100 168 L112 142Z", "#f3f0e8") + S("M86 142 L100 170 L114 142", x.b, 3)
+      + fold([84, 172, 86, 180, 84, 186], x.a) + fold([118, 170, 116, 178, 118, 184], x.a)
+      + `<rect x="60" y="184" width="80" height="9" fill="#7a4a2e"/><rect x="92" y="181" width="16" height="15" rx="3" fill="${x.b}"/><rect x="96" y="185" width="8" height="7" rx="1.5" fill="#7a4a2e"/>`,
+    arm: (x) => S("M44 190 L66 190", x.b, 2.4),
+    shoulders: (x) => both(E(70, 152, 9, 5, x.b) + E(70, 151, 5, 2, lighten(x.b, .4))) },
+  { id: "knight", label: "騎士", auto: ["#b8c0cc", "#3f6fd1"], sleeve: () => "#8e96a3",
+    draw: (x) => P(TORSO, shade(x.a, .3)) + P("M70 150 Q100 140 130 150 L128 194 Q100 204 72 194Z", x.a)
+      + P("M76 154 Q90 148 98 148 L98 190 Q84 192 78 188Z", lighten(x.a, .3), 'opacity=".55"') + S("M100 148 L100 198", shade(x.a, .3), 1.6)
+      + P("M100 160 L111 164 L111 175 Q111 184 100 189 Q89 184 89 175 L89 164Z", x.b) + P("M100 166 L104 174 L100 182 L96 174Z", lighten(x.b, .5))
+      + [[76, 156], [124, 156], [78, 190], [122, 190]].map(([a, b]) => rivet(a, b, x.a)).join("")
+      + P("M84 140 Q100 150 116 140 L118 151 Q100 161 82 151Z", x.a) + S("M83 146 Q100 156 117 146", shade(x.a, .3), 1.2),
+    arm: () => chainmail("#8e96a3"),
+    shoulders: (x) => both(P("M50 150 C58 138 80 140 84 154 C74 154 62 158 54 166 C49 160 48 155 50 150Z", x.a)
+      + P("M48 162 C56 155 70 156 78 162 C70 164 60 168 54 175 C49 171 47 166 48 162Z", shade(x.a, .15)) + rivet(64, 149, x.a) + rivet(58, 154, x.a)) },
+  { id: "mage", label: "魔法使い", auto: ["#8a63d2", "#e8b84a"],
+    draw: (x) => P(TORSO, x.a) + S("M100 154 L100 200", shade(x.a, .35), 2) + both(S("M95 152 L93 200", x.b, 2.2))
+      + `<rect x="60" y="180" width="80" height="9" fill="${shade(x.a, .3)}"/>` + S("M60 180 L140 180 M60 189 L140 189", x.b, 1.4)
+      + fold([80, 192, 82, 196, 80, 200], x.a) + fold([120, 192, 118, 196, 120, 200], x.a)
+      + P("M70 148 Q100 132 130 148 L126 164 Q100 152 74 164Z", shade(x.a, .22)) + S("M74 164 Q100 152 126 164", x.b, 2)
+      + C(100, 162, 6, x.b) + C(100, 162, 4, "#2ab3c9") + C(98.6, 160.6, 1.3, "#fff"),
+    arm: (x) => S("M43 188 L67 186", x.b, 2.4) + fold([56, 164, 58, 174, 56, 182], x.a) },
+  { id: "priest", label: "僧侶", auto: ["#f3f0e8", "#3f6fd1"],
+    draw: (x) => P(TORSO, x.a) + P("M92 142 L100 154 L108 142Z", x.skin)
+      + both(P("M85 142 L89 200 L98 200 L95 142Z", x.b) + S("M85 142 L89 200 M95 142 L98 200", "#e8b84a", 1.2) + P("M92 172 L94.5 176 L92 180 L89.5 176Z", "#e8b84a"))
+      + C(100, 168, 7.5, "#e8b84a") + C(100, 168, 4, x.a) + fold([74, 176, 76, 186, 74, 196], x.a) + fold([126, 176, 124, 186, 126, 196], x.a),
+    arm: (x) => S("M43 192 L67 190", "#e8b84a", 2) },
+  { id: "thief", label: "盗賊", auto: ["#5f6f3a", "#8a5a3a"], sleeve: () => "#d8cdb8",
+    draw: (x) => P(TORSO, "#d8cdb8") + vest(x.a) + both(S("M90 142 L97 200", lighten(x.a, .2), 1.6))
+      + S("M68 158 L132 198", x.b, 7) + [[84, 168], [104, 180]].map(([a, b]) => `<rect x="${a - 5}" y="${b - 5}" width="10" height="9" rx="2" fill="${shade(x.b, .15)}" transform="rotate(32 ${a} ${b})"/>`).join("")
+      + P("M80 140 Q100 154 120 140 L122 150 Q100 164 78 150Z", "#c9a46a") + P("M106 154 L114 172 L102 166Z", "#c9a46a"),
+    arm: (x) => `<rect x="43" y="184" width="24" height="12" rx="2" fill="${x.b}"/>` + S("M43 190 L67 190", shade(x.b, .3), 1) },
+  { id: "ninja", label: "忍者", auto: ["#2a3f7a", "#3a3438"],
+    draw: (x) => P(TORSO, x.a) + P("M86 140 L106 180 L112 176 L94 140Z", lighten(x.a, .25)) + S("M114 140 L98 172", shade(x.a, .35), 2)
+      + `<rect x="60" y="184" width="80" height="8" fill="${x.b}"/>` + P("M104 184 L116 196 L110 198 L100 190Z", x.b)
+      + fold([78, 160, 80, 170, 78, 178], x.a),
+    arm: () => `<rect x="44" y="176" width="23" height="20" rx="3" fill="#8e96a3"/>` + S("M44 182 L67 182 M44 188 L67 188", "#5f6875", 1.2) },
+  { id: "archer", label: "弓使い", auto: ["#4fa36f", "#8a5a3a"],
+    draw: (x) => P(TORSO, x.a) + P("M92 142 L100 158 L108 142Z", x.skin) + S("M94 146 L106 150 M95 151 L105 154", x.b, 1.4)
+      + S("M66 156 L134 198", x.b, 6) + `<rect x="94" y="172" width="12" height="9" rx="2" fill="#e8b84a" transform="rotate(32 100 176)"/>`
+      + fold([118, 160, 120, 170, 118, 178], x.a),
+    arm: (x) => `<rect x="44" y="182" width="23" height="14" rx="3" fill="${x.b}"/>` + S("M48 185 L62 193 M62 185 L48 193", lighten(x.b, .4), 1),
+    shoulders: (x) => P("M52 152 C60 142 78 144 82 156 C72 156 62 160 56 166 C52 162 50 157 52 152Z", x.b) },
+  { id: "bard", label: "吟遊詩人", auto: ["#d9473a", "#ffffff"],
+    draw: (x) => P(TORSO, "#ffffff") + vest(x.a) + both(C(86, 160, 2, "#e8b84a") + C(87.5, 174, 2, "#e8b84a") + C(89, 188, 2, "#e8b84a"))
+      + P("M92 144 Q100 150 108 144 L106 152 Q100 158 94 152 L92 160 Q100 166 108 160 L104 170 Q100 174 96 170Z", x.b, `stroke="${shade(x.b, .2)}" stroke-width="1"`),
+    arm: (x) => [46, 52, 58, 64].map((v) => `<rect x="${v}" y="158" width="2.6" height="42" fill="${x.b}"/>`).join(""),
+    shoulders: (x) => both(E(66, 156, 12, 8, x.a) + S("M58 154 Q66 150 74 154 M60 159 Q66 155 72 159", x.b, 1.4)) },
+  { id: "alchemist", label: "錬金術師", auto: ["#8a5a3a", "#2ab3c9"],
+    draw: (x) => P(TORSO, "#f3f0e8") + both(P("M70 154 C74 146 84 142 90 142 L99 200 L64 200 C64 180 66 164 70 154Z", x.a) + P("M90 142 L99 200 L93 200 L83 162 L89 154 L81 148Z", shade(x.a, .2)))
+      + `<rect x="114" y="174" width="16" height="16" rx="2" fill="${shade(x.a, .15)}"/>`
+      + P("M119 166 L125 166 L125 171 L129 180 Q129 184 122 184 Q115 184 115 180 L119 171Z", x.b) + `<rect x="118" y="163" width="8" height="4" rx="1" fill="#a8693c"/>`,
+    arm: (x) => `<rect x="43" y="186" width="24" height="10" fill="${lighten(x.a, .25)}"/>` },
+  { id: "villager", label: "村人", auto: ["#e8b84a", "#8a5a3a"],
+    draw: (x) => P(TORSO, x.a) + P("M92 142 L100 156 L108 142Z", x.skin) + S("M94 146 L106 150 M94 151 L105 154 M95 156 L103 158", x.b, 1.6)
+      + P("M66 170 L134 170 L136 200 L64 200Z", "#f3f0e8") + S("M68 172 L72 148 M132 172 L128 148", "#f3f0e8", 4) + S("M66 170 L134 170", shade("#f3f0e8", .15), 1.4)
+      + `<rect x="88" y="180" width="24" height="13" rx="2" fill="${shade("#f3f0e8", .08)}"/>`,
+    arm: (x) => fold([56, 166, 58, 176, 56, 186], x.a) },
+  { id: "demon", label: "魔王", auto: ["#3a3438", "#d9473a"],
+    draw: (x) => P(TORSO, x.a) + P("M72 150 Q100 142 128 150 L126 194 Q100 202 74 194Z", lighten(x.a, .12)) + S("M72 150 Q100 142 128 150", x.b, 2)
+      + P("M86 140 Q100 158 114 140 L100 178Z", x.b) + C(100, 184, 5, "#e8b84a") + C(100, 184, 2.6, x.b),
+    arm: (x) => S("M43 186 L67 186", x.b, 2.4),
+    shoulders: (x) => both(P("M48 158 L54 136 L62 152 L70 138 L76 156 C68 156 58 160 50 168Z", x.a) + S("M50 166 C58 158 68 156 76 156", x.b, 1.6)) },
+  { id: "princess", label: "姫", auto: ["#f08fb5", "#e8b84a"], sleeve: (x) => x.skin,
+    draw: (x) => P(TORSO, x.a) + P("M76 152 Q88 144 100 154 Q112 144 124 152 L120 140 L80 140Z", x.skin)
+      + S("M76 152 Q88 144 100 154 Q112 144 124 152", "#ffffff", 2.6) + S("M82 150 Q100 166 118 150", x.b, 1.6) + P("M100 160 L104 165 L100 170 L96 165Z", x.b)
+      + fold([86, 176, 84, 188, 86, 198], x.a) + fold([114, 176, 116, 188, 114, 198], x.a),
+    shoulders: (x) => both(E(68, 156, 13, 9, x.a) + S("M58 153 Q68 148 78 153", lighten(x.a, .35), 1.6)) },
 ];
 
 const BACKS = [
@@ -123,7 +192,7 @@ const BACKS = [
   { id: "quiver", label: "矢筒",      auto: ["#8a5a3a", "#d9473a"], back: (x) => `<g transform="rotate(-24 140 150)"><rect x="132" y="112" width="18" height="60" rx="5" fill="${x.a}"/>${[136, 141, 146].map((a, i) => S(`M${a} 112 L${a} ${96 - i * 3}`, "#8a5a3a", 2) + P(`M${a - 4} ${100 - i * 3} L${a} ${90 - i * 3} L${a + 4} ${100 - i * 3}Z`, x.b)).join("")}</g>` },
 ];
 
-// A mitten hand gripping an item, so held things read as held (the arm stays hidden).
+// A mitten hand. Held items list their grips; the arm on that side bends up to the hand.
 const hand = (x, y, rot, skin) =>
   `<g transform="translate(${x} ${y}) rotate(${rot})">` +
   P("M-8 -1 C-8 -7 -3 -9 3 -9 C8 -8 10 -3 9 2 C8 7 3 9 -2 8 C-6 7 -8 3 -8 -1Z", skin) +
@@ -133,36 +202,35 @@ const sparkle = (x, y, r, fill) => `<path transform="translate(${x} ${y}) scale(
 const note = (x, y, fill) => `<ellipse cx="${x}" cy="${y}" rx="4" ry="3" transform="rotate(-20 ${x} ${y})" fill="${fill}"/>` +
   `<rect x="${x + 2.6}" y="${y - 15}" width="2" height="15" fill="${fill}"/>` + P(`M${x + 4.6} ${y - 15} Q${x + 11} ${y - 11} ${x + 9} ${y - 5} Q${x + 8} ${y - 9} ${x + 4.6} ${y - 10}Z`, fill);
 
-// Weapons. `back` items are carried behind the body; `front` items are held in a hand
-// and stay fully inside the frame so their shapes read at small sizes.
+// Weapons. `back` items are carried behind the body. `front` items are held: they stay
+// fully inside the frame, and `grips` ({ side, x, y, rot }) place the hands that hold them.
 const WEAPONS = [
   { id: "none",   label: "なし" },
   { id: "sword",  label: "剣",  auto: ["#b8c0cc", "#e8b84a"], back: (x) => `<g transform="rotate(32 150 132)"><path d="M145 30 L155 30 L155 120 L150 130 L145 120Z" fill="${x.a}"/>${S("M150 34 L150 118", lighten(x.a, .5), 1.6)}<rect x="136" y="120" width="28" height="7" rx="3" fill="${x.b}"/><rect x="146" y="127" width="8" height="20" rx="3" fill="#8a5a3a"/>${C(150, 150, 5, x.b)}</g>` },
-  { id: "staff",  label: "杖",  auto: ["#8a5a3a", "#2ab3c9"], front: (x) =>
+  { id: "staff",  label: "杖",  auto: ["#8a5a3a", "#2ab3c9"], grips: [{ side: "L", x: 33.5, y: 150, rot: -8 }], front: (x) =>
       `<rect x="30" y="62" width="7" height="138" rx="3.5" fill="${x.a}"/>` +
       P("M33.5 66 C22 58 20 42 28 32 C28 46 31 50 33.5 54 C36 50 39 46 39 32 C47 42 45 58 33.5 66Z", shade(x.a, .15)) +
-      C(33.5, 46, 10, x.b) + C(30, 42, 3.4, "#fff", 'opacity=".8"') + sparkle(52, 34, 5, x.b) + sparkle(16, 60, 3.6, x.b) +
-      hand(33.5, 152, -8, x.skin) },
-  { id: "wand",   label: "ステッキ", auto: ["#f3f0e8", "#e8b84a"], front: (x) =>
-      `<g transform="rotate(16 158 160)"><rect x="155" y="110" width="6" height="56" rx="3" fill="${x.a}"/>${sparkle(158, 100, 13, x.b)}</g>` +
-      sparkle(182, 92, 4.6, x.b) + sparkle(140, 84, 3.6, x.b) + hand(158, 160, 10, x.skin) },
+      C(33.5, 46, 10, x.b) + C(30, 42, 3.4, "#fff", 'opacity=".8"') + sparkle(52, 34, 5, x.b) + sparkle(16, 60, 3.6, x.b) },
+  { id: "wand",   label: "ステッキ", auto: ["#f3f0e8", "#e8b84a"], grips: [{ side: "R", x: 160, y: 156, rot: 10 }], front: (x) =>
+      `<g transform="rotate(16 160 156)"><rect x="157" y="106" width="6" height="56" rx="3" fill="${x.a}"/>${sparkle(160, 96, 13, x.b)}</g>` +
+      sparkle(184, 88, 4.6, x.b) + sparkle(142, 80, 3.6, x.b) },
   { id: "shield", label: "盾",  auto: ["#3f6fd1", "#e8b84a"], front: (x) =>
       P("M22 142 Q47 132 72 142 L72 164 Q72 188 47 199 Q22 188 22 164Z", x.a) +
       P("M27 146 Q47 138 67 146 L67 164 Q67 184 47 193 Q27 184 27 164Z", "none", `stroke="${x.b}" stroke-width="2.4"`) +
       P("M47 150 L56 166 L47 184 L38 166Z", x.b) + [[32, 150], [62, 150], [47, 192]].map(([a, b]) => C(a, b, 1.8, lighten(x.b, .3))).join("") },
-  { id: "bow",    label: "弓",  auto: ["#8a5a3a", "#d9473a"], front: (x) =>
+  { id: "bow",    label: "弓",  auto: ["#8a5a3a", "#d9473a"], grips: [{ side: "L", x: 18, y: 131, rot: 90 }], front: (x) =>
       S("M38 66 L38 196", "#5a4636", 1.4) +
       P("M38 62 C46 64 42 72 38 70 C24 92 18 112 18 131 C18 150 24 170 38 192 C42 190 46 198 38 200 C20 178 12 156 12 131 C12 106 20 84 38 62Z", x.a) +
-      `<rect x="10" y="122" width="10" height="18" rx="3" fill="${x.b}"/>` + hand(18, 131, 90, x.skin) },
+      `<rect x="10" y="122" width="10" height="18" rx="3" fill="${x.b}"/>` },
   { id: "axe",    label: "斧",  auto: ["#b8c0cc", "#8a5a3a"], back: (x) => `<g transform="rotate(28 150 130)"><rect x="146" y="44" width="8" height="106" rx="4" fill="${x.b}"/><path d="M154 50 C176 46 184 64 180 82 C170 76 162 76 154 80Z" fill="${x.a}"/><path d="M146 50 C130 52 126 66 130 76 C136 72 141 72 146 74Z" fill="${shade(x.a, .15)}"/></g>` },
   { id: "spear",  label: "槍",  auto: ["#b8c0cc", "#8a5a3a"], back: (x) => `<g transform="rotate(20 150 130)"><rect x="147" y="30" width="6" height="170" rx="3" fill="${x.b}"/><path d="M150 4 L158 30 L150 38 L142 30Z" fill="${x.a}"/><rect x="144" y="36" width="12" height="4" rx="2" fill="#d9473a"/></g>` },
-  { id: "book",   label: "魔導書", auto: ["#d9473a", "#e8b84a"], front: (x) =>
+  { id: "book",   label: "魔導書", auto: ["#d9473a", "#e8b84a"], grips: [{ side: "L", x: 80, y: 172, rot: -20 }], front: (x) =>
       `<g transform="rotate(-12 58 168)"><rect x="37" y="150" width="46" height="36" rx="3" fill="#f3f0e8"/>` +
       S("M80 154 L80 184 M77 152 L77 185", "#d9cfbf", 1) +
       `<rect x="34" y="147" width="45" height="36" rx="3" fill="${x.a}"/><rect x="34" y="147" width="7" height="36" rx="2" fill="${shade(x.a, .3)}"/>` +
       P("M41 147 L49 147 L41 155Z M79 147 L71 147 L79 155Z M41 183 L49 183 L41 175Z M79 183 L71 183 L79 175Z", x.b) +
-      C(60, 165, 7, x.b) + sparkle(60, 165, 5, x.a) + `</g>` + sparkle(88, 140, 4, x.b) + hand(78, 172, -20, x.skin) },
-  { id: "lute",   label: "リュート", auto: ["#c47f45", "#3a3438"], front: (x) =>
+      C(60, 165, 7, x.b) + sparkle(60, 165, 5, x.a) + `</g>` + sparkle(90, 140, 4, x.b) },
+  { id: "lute",   label: "リュート", auto: ["#c47f45", "#3a3438"], grips: [{ side: "R", x: 165, y: 124, rot: 0 }], front: (x) =>
       `<g transform="translate(150 148) rotate(32)">` +
       `<rect x="-3.5" y="-50" width="7" height="46" fill="${shade(x.a, .3)}"/>` +
       P("M-4 -50 L4 -50 L9 -63 L1 -65Z", shade(x.a, .4)) + C(-.5, -55, 1.6, x.b) + C(3.5, -60, 1.6, x.b) +
@@ -170,13 +238,11 @@ const WEAPONS = [
       E(-10, 12, 5, 10, "#fff", 'opacity=".22"') +
       `<circle cx="0" cy="13" r="8.6" fill="none" stroke="${lighten(x.a, .45)}" stroke-width="1.6"/>` + C(0, 13, 6, x.b) +
       `<rect x="-8" y="32" width="16" height="3.6" rx="1.5" fill="${shade(x.a, .45)}"/>` +
-      S("M-2 -48 L-2 33 M2 -48 L2 33", "#f3f0e8", .7) +
-      hand(0, -28, -32, x.skin) + `</g>` +
+      S("M-2 -48 L-2 33 M2 -48 L2 33", "#f3f0e8", .7) + `</g>` +
       note(172, 70, x.b) + note(188, 92, x.b) },
-  { id: "dagger", label: "短剣", auto: ["#b8c0cc", "#3a3438"], front: (x) =>
+  { id: "dagger", label: "短剣", auto: ["#b8c0cc", "#3a3438"], grips: [{ side: "R", x: 170, y: 164, rot: 12 }], front: (x) =>
       `<g transform="translate(10 8) rotate(12 160 156)">` + P("M160 96 L166 108 L166 144 L154 144 L154 108Z", x.a) + S("M160 104 L160 140", lighten(x.a, .5), 1.4) +
-      `<rect x="148" y="142" width="24" height="6" rx="3" fill="${x.b}"/><rect x="156" y="148" width="8" height="16" rx="2" fill="#8a5a3a"/>` + C(160, 167, 4, x.b) +
-      hand(160, 156, 0, x.skin) + `</g>` },
+      `<rect x="148" y="142" width="24" height="6" rx="3" fill="${x.b}"/><rect x="156" y="148" width="8" height="16" rx="2" fill="#8a5a3a"/>` + C(160, 167, 4, x.b) + `</g>` },
 ];
 
 // cover: hair is only shown below this y (outside the face) / hood: hair clipped to the hood opening
@@ -273,7 +339,7 @@ function compose(scene) {
   const G = gear.p;
   const showHair = !G.hidesHair;
   const look = { id: scene.id, skin, hair, a: cfg.eyesColor, br: luminance(hair) > .6 ? mix(hair, INK, .5) : shade(hair, .1) };
-  const bodyUrl = scene.clip("b", BODY), faceUrl = scene.clip("f", FACE);
+  const torsoUrl = scene.clip("b", TORSO), armUrl = scene.clip("a", ARM), faceUrl = scene.clip("f", FACE);
   const fringeUrl = H.front ? scene.clip("hf", H.front) : "";
   scene.define(blushGradient(scene.uid("bl")));
 
@@ -289,10 +355,23 @@ function compose(scene) {
   if (G.back) scene.add(scene.outlined(G.back(gear)));
   if (weapon.p.back) scene.add(scene.outlined(weapon.p.back(weapon)));
   if (showHair && H.back && !G.hidesBack) scene.add(scene.outlined(underGear(P(H.back, shade(hair, .22)))));
-  // body
+  // body: torso, then arms — hanging, or bent up to grip a held item — then shoulders
+  const grips = weapon.p.grips || [];
+  const bent = new Set(grips.map((g) => g.side));
+  const sleeve = outfit.p.sleeve ? outfit.p.sleeve(outfit) : outfit.a;
   scene.add(P(NECK, skin, `stroke="${LINE}" stroke-width="1.6"`), P("M91 128 Q100 140 109 128 L109 138 Q100 148 91 138Z", shade(skin, .14)));
-  scene.add(scene.silhouette(P(BODY, outfit.a)));
-  scene.add(scene.clipped(bodyUrl, outfit.p.draw(outfit) + P(BODY, "#1a1226", 'opacity=".08" transform="translate(6 4)"')));
+  scene.add(scene.silhouette(P(TORSO, outfit.a)));
+  scene.add(scene.clipped(torsoUrl, outfit.p.draw(outfit) + P(TORSO, "#1a1226", 'opacity=".1" transform="translate(7 3)"')));
+  const hangingArm = scene.outlined(P(ARM, sleeve)) + scene.clipped(armUrl, P(ARM, shade(sleeve, .18)) + P(ARM, sleeve, 'transform="translate(-3 -2)"') + (outfit.p.arm ? outfit.p.arm(outfit) : ""));
+  if (!bent.has("L")) scene.add(hangingArm);
+  if (!bent.has("R")) scene.add(M(hangingArm));
+  for (const g of grips) {
+    const [sx, sy] = SHOULDER[g.side], out = g.side === "L" ? -1 : 1;
+    const ex = (sx + g.x) / 2 + out * 12, ey = Math.min(194, Math.max(sy, g.y) + 22);
+    const d = `M${sx} ${sy} Q${ex} ${ey} ${g.x} ${g.y}`;
+    scene.add(S(d, LINE, 15 + LINE_W), S(d, sleeve, 15), S(d, shade(sleeve, .18), 4, 'opacity=".5" transform="translate(2 3)"'));
+  }
+  if (outfit.p.shoulders) scene.add(scene.outlined(outfit.p.shoulders(outfit)));
   if (back.p.front) scene.add(scene.outlined(back.p.front(back)));
   if (showHair && H.locks && !G.hidesBack) scene.add(scene.outlined(underGear(P(H.locks, hair))));
   // head
@@ -305,10 +384,11 @@ function compose(scene) {
     + (showHair && H.front && !G.cover && !G.hood ? P(H.front, shade(skin, .16), 'transform="translate(0 4)"') : "")));
   for (const mark of scene.selected("marks")) scene.add(mark.draw(look));
   scene.add(scene.part("eyes").draw(look));
-  if (!G.hidesMouth) scene.add(scene.part("mouth").draw(look));
+  if (!G.hidesMouth) scene.add(T([100, 113, 102.6, 116, 99, 118], shade(skin, .3), 1.4, 'opacity=".7"'), scene.part("mouth").draw(look));
   if (ear.top && showHair) scene.add(scene.outlined(ear.draw(look)));
   if (showHair && H.front) {
     scene.add(scene.outlined(underGear(P(H.front, hair) + (H.ties || []).map(([x, y]) => E(x, y, 6, 4.4, "#d9473a")).join(""))));
+    if (H.strands) scene.add(underGear(H.strands.map((p) => T(p, luminance(hair) < .25 ? lighten(hair, .3) : shade(hair, .28), 1.6, 'opacity=".6"')).join("")));
     // the anime "angel ring" highlight
     scene.add(underGear(scene.clipped(fringeUrl, T([66, 64, 100, 50, 134, 64], "#fff", 4.2, 'opacity=".3"'))));
   }
@@ -316,6 +396,7 @@ function compose(scene) {
   // in front: headgear, weapons held in hand
   if (G.front) scene.add(scene.outlined(G.front(gear)));
   if (weapon.p.front) scene.add(scene.outlined(weapon.p.front(weapon)));
+  if (grips.length) scene.add(scene.outlined(grips.map((g) => hand(g.x, g.y, g.rot, skin)).join("")));
 }
 
 export const Game = defineLibrary({
