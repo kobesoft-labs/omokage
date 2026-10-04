@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gallery (QA)</title>
+<style>
+  body { margin: 0; padding: 16px; background: #faf8f5; font: 13px system-ui, "Hiragino Sans", sans-serif; color: #2b2233; }
+  .g { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--s, 240px), 1fr)); gap: 12px; }
+  .g div { text-align: center; }
+  .g svg { width: 100%; height: auto; display: block; border-radius: 18px; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="g" id="g"></div>
+<script type="module">
+// ?style=game  ?size=300  ?only=presets|parts&cat=weapon  ?v=viewBox
+import { getStyle } from "../src/index.js";
+const q = new URLSearchParams(location.search);
+const S = getStyle(q.get("style") || "game");
+document.documentElement.style.setProperty("--s", (q.get("size") || 240) + "px");
+const vb = q.get("v") || undefined;
+let items;
+if (q.get("cat")) {
+  const cat = q.get("cat"), base = q.get("base") ? JSON.parse(q.get("base")) : {};
+  items = S.PARTS[cat].map((p) => ({ label: p.label, cfg: { ...base, [cat]: p.id } }));
+} else {
+  items = S.PRESETS.map(({ label, ...cfg }) => ({ label, cfg }));
+}
+document.getElementById("g").innerHTML = items.map(({ label, cfg }) => `<div>${S.render(cfg, { viewBox: vb })}${label}</div>`).join("");
+</script>
+</body>
+</html>
