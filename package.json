@@ -1,0 +1,36 @@
+{
+  "name": "omokage",
+  "version": "0.1.0",
+  "description": "パーツを組み合わせて作る SVG アバターと、選んでカスタマイズできるピッカー。Part-based SVG avatars (people, yokai, animals, RPG characters) with a ready-made picker dialog.",
+  "license": "BSD-3-Clause",
+  "author": "神戸ソフト株式会社 (Kobesoft Co., Ltd.)",
+  "homepage": "https://kobesoft-labs.github.io/omokage/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kobesoft-labs/omokage.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kobesoft-labs/omokage/issues"
+  },
+  "keywords": ["avatar", "svg", "avatar-generator", "picker", "illustration", "yokai", "japan"],
+  "type": "module",
+  "main": "dist/omokage.esm.js",
+  "module": "dist/omokage.esm.js",
+  "browser": "dist/omokage.min.js",
+  "unpkg": "dist/omokage.min.js",
+  "jsdelivr": "dist/omokage.min.js",
+  "exports": {
+    ".": "./dist/omokage.esm.js",
+    "./src": "./src/index.js"
+  },
+  "files": ["dist", "src", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "scripts": {
+    "serve": "python3 tools/serve.py 8480",
+    "build": "node tools/build.mjs",
+    "check": "node tools/check.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>拡大表示</title>
+<style>
+  body { margin: 0; padding: 16px; background: #faf8fc; font-family: system-ui, "Hiragino Sans", sans-serif; color: #2b2233; }
+  .g { display: grid; grid-template-columns: repeat(var(--n, 2), 1fr); gap: 12px; }
+  .g div { font-size: 13px; text-align: center; }
+  .g svg { width: 100%; height: auto; display: block; border-radius: 18px; }
+</style>
+</head>
+<body>
+<div class="g" id="g"></div>
+<script type="module">
+import { Officers } from "../src/index.js";
+// ?r=0,1,2 で職種プリセットを選ぶ / ?n=列数 / ?v=x y w h で切り出し
+const q = new URLSearchParams(location.search);
+const ids = (q.get("r") || "0,1,2,3").split(",").map(Number);
+document.getElementById("g").style.setProperty("--n", q.get("n") || 2);
+document.getElementById("g").innerHTML = ids.map(i => { const r = Officers.PRESETS[i]; return `<div>${Officers.render(r, { viewBox: q.get("v") || undefined })}${r.label}</div>`; }).join("");
+</script>
+</body>
+</html>

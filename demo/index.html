@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>omokage 組み込みデモ</title>
+<style>
+  :root { font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; color: #1f2430; }
+  body { margin: 0; background: #f3f5f8; }
+  header { background: #fff; border-bottom: 1px solid #e5e8ee; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; }
+  header b { font-size: 15px; }
+  header .me { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: #eef1f5; }
+  main { max-width: 640px; margin: 32px auto; padding: 0 16px 120px; }
+  .card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .prof { display: flex; gap: 20px; align-items: center; }
+  .av { width: 104px; height: 104px; border-radius: 28px; overflow: hidden; flex: none; background: #eef1f5; display: grid; place-items: center; color: #9aa3b2; font-size: 12px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #6b7385; font-size: 14px; margin: 0 0 12px; }
+  button { font: inherit; font-size: 14px; padding: 9px 16px; border-radius: 10px; border: 1px solid #d5dae3; background: #fff; cursor: pointer; }
+  button.pri { background: #1f2430; color: #fff; border-color: #1f2430; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  h2 { font-size: 14px; margin: 28px 0 8px; color: #6b7385; font-weight: 600; }
+  pre { background: #1f2430; color: #d8dee9; padding: 14px; border-radius: 12px; font-size: 12px; overflow: auto; margin: 0; }
+  .hue { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #6b7385; margin-top: 16px; }
+</style>
+</head>
+<body>
+<header><b>Sample社 ポータル</b><div class="me" id="me"></div></header>
+<main>
+  <div class="card">
+    <div class="prof">
+      <div class="av" id="av">未設定</div>
+      <div>
+        <h1>田中 さくら</h1>
+        <p class="sub">営業部 ・ tanaka@example.com</p>
+        <div class="row"><button class="pri" id="edit">アバターを設定</button><button id="clear">リセット</button></div>
+      </div>
+    </div>
+    <label class="hue">会社のテーマ色（人物の服に効く） <input type="range" id="hue" min="0" max="359" value="215"></label>
+  </div>
+  <h2>保存される値</h2>
+  <pre id="json">（未設定）</pre>
+</main>
+
+<script src="../dist/omokage.min.js"></script>
+<script>
+// Keep only { style, config }; render it whenever it is shown.
+const KEY = "omokage-demo";
+let saved = null;
+try { saved = JSON.parse(localStorage.getItem(KEY)); } catch {}
+const $ = (id) => document.getElementById(id);
+const hue = () => +$("hue").value;
+
+function show() {
+  if (saved) { Omokage.mount($("av"), saved, { hue: hue() }); Omokage.mount($("me"), saved, { hue: hue() }); }
+  else { $("av").textContent = "未設定"; $("me").innerHTML = ""; }
+  $("edit").textContent = saved ? "アバターを変更" : "アバターを設定";
+  $("json").textContent = saved ? JSON.stringify(saved, null, 2) : "（未設定）";
+}
+
+$("edit").onclick = async () => {
+  const avatar = await Omokage.openPicker({ value: saved, hue: hue(), seed: "tanaka" });
+  if (!avatar) return;                                   // cancelled
+  saved = { style: avatar.style, config: avatar.config }; // what you store on your server
+  try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch {}
+  show();
+};
+$("clear").onclick = () => { saved = null; try { localStorage.removeItem(KEY); } catch {} show(); };
+$("hue").oninput = show;
+show();
+</script>
+</body>
+</html>

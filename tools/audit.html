@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>はみ出しチェック</title>
+<style>
+  body { margin: 0; padding: 24px; font-family: system-ui, "Hiragino Sans", sans-serif; background: #faf8fc; color: #2b2233; }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  p { font-size: 13px; color: #7a6f85; margin: 0 0 16px; }
+  #sum { font-size: 15px; font-weight: 600; margin: 12px 0 16px; padding: 12px 16px; border-radius: 10px; background: #fff; border: 1px solid #e6e0ec; }
+  #sum.ok { color: #2f7a4a; } #sum.ng { color: #c0392b; }
+  .fails { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  .f { background: #fff; border: 1px solid #e6e0ec; border-radius: 10px; padding: 8px; font-size: 12px; }
+  .f canvas { width: 100%; height: auto; display: block; border-radius: 6px; margin-bottom: 6px; image-rendering: pixelated; }
+  a { color: #6b4fd8; }
+</style>
+</head>
+<body>
+<h1>はみ出しチェック</h1>
+<p>すべてのパーツを「あり／なし」で描き比べ、変わったピクセルがそのカテゴリの範囲（顔・服の領域など）の外にあれば「はみ出し」として出す。
+赤＝範囲の外に出た部分、薄い青＝そのカテゴリの範囲。<a href="?raw=1">範囲での切り抜きを外して検査</a>（検出できることの確認用） / <a href="?">通常</a></p>
+<div id="sum">検査中…</div>
+<div class="fails" id="fails"></div>
+<script type="module">
+import { Officers } from "../src/index.js";
+const O = Officers;
+const RAW = new URLSearchParams(location.search).has("raw");
+// 体型・髪型・服が違う 3 人を土台にする
+const BASES = [
+  { hair: "side", top: "suit" },
+  { hair: "long", top: "hoodie", skin: "#83563a", hairColor: "#dcae63" },
+  { hair: "afro", top: "turtle", hat: "beanie", skin: "#e9b48e" },
+];
+const SIZE = 200, TOL = 2;   // 境界の±2px はアンチエイリアスとして許す
+
+function raster(svg){
+  return new Promise((ok, ng) => {
+    const img = new Image();
+    img.onload = () => { const c = document.createElement("canvas"); c.width = c.height = SIZE; const g = c.getContext("2d"); g.drawImage(img, 0, 0, SIZE, SIZE); ok(g.getImageData(0, 0, SIZE, SIZE)); };
+    img.onerror = ng;
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  });
+}
+
+// 範囲の判定用マップ（1 = 範囲内。境界から TOL px 以内も範囲内とみなす）
+const regionCache = {};
+function regionMap(cat){
+  if (regionCache[cat]) return regionCache[cat];
+  const c = document.createElement("canvas"); c.width = c.height = SIZE;
+  const g = c.getContext("2d"); g.lineWidth = TOL * 2; g.lineJoin = "round";
+  const paths = O.REGIONS[cat].map(d => new Path2D(d));
+  const m = new Uint8Array(SIZE * SIZE);
+  for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++){
+    const px = x + .5, py = y + .5;
+    m[y * SIZE + x] = paths.some(p => g.isPointInPath(p, px, py) || g.isPointInStroke(p, px, py)) ? 1 : 0;
+  }
+  return regionCache[cat] = m;
+}
+
+async function check(cat, part, base){
+  const value = cat === "face" ? [part.id] : part.id;
+  const cfg = { ...base, [cat]: value, ...(cat === "face" ? {} : {}) };
+  const opts = { noClip: RAW };
+  const [a, b] = await Promise.all([raster(O.render(cfg, opts)), raster(O.render(cfg, { ...opts, omit: cat }))]);
+  const map = regionMap(cat), bad = [];
+  for (let i = 0; i < SIZE * SIZE; i++){
+    const j = i * 4, d = Math.abs(a.data[j] - b.data[j]) + Math.abs(a.data[j+1] - b.data[j+1]) + Math.abs(a.data[j+2] - b.data[j+2]);
+    if (d > 30 && !map[i]) bad.push(i);
+  }
+  return { bad, img: a, map };
+}
+
+function showFail(cat, part, base, r){
+  const c = document.createElement("canvas"); c.width = c.height = SIZE;
+  const g = c.getContext("2d"); const im = new ImageData(new Uint8ClampedArray(r.img.data), SIZE, SIZE);
+  for (let i = 0; i < SIZE * SIZE; i++) if (r.map[i]) { const j = i * 4; im.data[j] = im.data[j] * .8; im.data[j+1] = im.data[j+1] * .85 + 30; im.data[j+2] = Math.min(255, im.data[j+2] * .8 + 60); }
+  for (const i of r.bad){ const j = i * 4; im.data[j] = 230; im.data[j+1] = 30; im.data[j+2] = 40; }
+  g.putImageData(im, 0, 0);
+  const cl = O.CATEGORIES.find(k => k.key === cat);
+  const el = document.createElement("div"); el.className = "f";
+  el.append(c, `${cl ? cl.label : cat}：${part.label}（${r.bad.length}px, 土台 ${BASES.indexOf(base) + 1}）`);
+  document.getElementById("fails").append(el);
+}
+
+(async () => {
+  let n = 0, fails = 0;
+  for (const cat of Object.keys(O.REGIONS)){
+    for (const part of O.PARTS[cat]){
+      if (part.free || part.id === "none") continue;
+      for (const base of BASES){
+        const r = await check(cat, part, base); n++;
+        if (r.bad.length){ fails++; showFail(cat, part, base, r); }
+      }
+      document.getElementById("sum").textContent = `検査中… ${n} 件`;
+    }
+  }
+  const s = document.getElementById("sum");
+  s.textContent = fails ? `${n} 件を検査、はみ出し ${fails} 件` : `${n} 件を検査、はみ出しなし`;
+  s.className = fails ? "ng" : "ok";
+  document.title = s.textContent;
+})();
+</script>
+</body>
+</html>
