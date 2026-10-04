@@ -1,4 +1,6 @@
 // The avatar picker: a modal dialog to choose an avatar and then customize it.
+// It is a thin view over the headless editor (model/editor.js) and the catalog
+// (model/catalog.js); a custom UI can use those two directly and behave the same way.
 //
 //   const avatar = await openPicker({ styles: [Officers, Yokai], value: saved, hue, seed });
 //   if (avatar) save(avatar);   // { style, config, svg }, or null when cancelled
@@ -10,6 +12,7 @@
 //   - Keyboard: Tab cycles inside, arrow keys move between tiles, Enter selects, Esc closes.
 //   - Closing with unsaved edits asks for confirmation in place.
 import { PICKER_CSS, ICON_X } from "./styles.js";
+import { createEditor } from "../model/editor.js";
 
 const CANDIDATES = 12;
 
@@ -39,8 +42,6 @@ const TEXT = {
 };
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const clone = (v) => JSON.parse(JSON.stringify(v));
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const toHex = (c) => (/^#[0-9a-f]{6}$/i.test(c) ? c : "#888888");
 const cssEscape = (s) => (globalThis.CSS && CSS.escape ? CSS.escape(s) : s);
 
@@ -57,7 +58,7 @@ function lockPageScroll() {
 /**
  * Opens the picker.
  * @param {object}   options
- * @param {object[]} options.styles avatar styles to offer (at least one)
+ * @param {(string|object)[]} [options.styles] styles to offer, as keys or style objects (default: all)
  * @param {{style: string, config: object}} [options.value] the current avatar, shown first
  * @param {number}   [options.hue]  company theme hue (used by styles with theme colors)
  * @param {string}   [options.seed] seed for the candidates, e.g. the user name
@@ -65,39 +66,19 @@ function lockPageScroll() {
  * @returns {Promise<{style: string, config: object, svg: string} | null>}
  */
 export function openPicker(options = {}) {
-  const libs = [].concat(options.styles || []).filter(Boolean);
-  if (!libs.length) throw new Error("omokage: openPicker() needs at least one style in `styles`");
   const text = { ...TEXT, ...options.text };
-  const { hue } = options;
-  const seed = options.seed || Math.random().toString(36).slice(2, 8);
   const current = options.value && options.value.config ? options.value : null;
-  const startLib = libs.find((l) => l.KEY === current?.style) || libs[0];
+  const editor = createEditor({ styles: options.styles, value: current, hue: options.hue, seed: options.seed });
+  const styles = editor.styles();
 
-  // ---------------------------------------------------------------- state
-  let lib = startLib;
+  // ---------------------------------------------------------------- view state
   let step = "pick";                  // "pick" | "edit"
-  let page = 0, candidates = [], selected = 0;
-  let config = null, original = null, dirty = false, confirming = false;
-  let group = 0, cat = null;
-
-  const groups = () => lib.GROUPS || [{ label: "パーツ", cats: lib.CATEGORIES.map((c) => c.key) }];
-  const category = (key) => lib.CATEGORIES.find((c) => c.key === key);
-  const render = (c, extra) => lib.render(c, { hue, ...extra });
-  const complete = (c) => ({ ...lib.DEFAULTS, ...c });
-  /** Only what differs from the defaults is returned, to keep stored configs small. */
-  const compact = (c) => Object.fromEntries(Object.entries(c).filter(([k, v]) => !same(v, lib.DEFAULTS[k])));
-
-  function makeCandidates() {
-    const list = [];
-    if (current && page === 0 && lib.KEY === current.style) list.push({ config: complete(current.config), tag: text.current });
-    const seen = new Set(list.map((c) => JSON.stringify(c.config)));
-    for (let i = 0; list.length < CANDIDATES && i < CANDIDATES * 4; i++) {
-      const c = complete(lib.random(`${seed}:${lib.KEY}:${page}:${i}`)), key = JSON.stringify(c);
-      if (!seen.has(key)) { seen.add(key); list.push({ config: c }); }
-    }
-    candidates = list;
+  let pickStyle = editor.getState().style, page = 0, candidates = [], selected = 0;
+  let confirming = false, group = 0, cat = null;
+  const makeCandidates = () => {
+    candidates = editor.candidates({ style: pickStyle, page, count: CANDIDATES, include: current });
     selected = 0;
-  }
+  };
   makeCandidates();
 
   // ---------------------------------------------------------------- shell
@@ -106,7 +87,7 @@ export function openPicker(options = {}) {
   const root = host.attachShadow({ mode: "open" });
   root.innerHTML = `<style>${PICKER_CSS}</style><div class="ov"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="t" tabindex="-1">
     <div class="hd"><h2 id="t">${esc(options.title || text.title)}</h2><span class="gap"></span>
-      ${libs.length > 1 ? `<div class="libs" role="tablist" aria-label="${esc(text.styleTabs)}">${libs.map((l) => `<button role="tab" data-lib="${l.KEY}">${esc(l.LABEL || l.KEY)}</button>`).join("")}</div>` : ""}
+      ${styles.length > 1 ? `<div class="libs" role="tablist" aria-label="${esc(text.styleTabs)}">${styles.map((s) => `<button role="tab" data-lib="${s.key}">${esc(s.label)}</button>`).join("")}</div>` : ""}
       <div class="steps" aria-hidden="true"><span data-s="pick">${esc(text.stepPick)}</span><span data-s="edit">${esc(text.stepEdit)}</span></div>
       <button class="x" aria-label="${esc(text.close)}" data-a="close">${ICON_X}</button></div>
     <div class="bd"></div><div class="ft"></div></div></div>`;
@@ -119,16 +100,19 @@ export function openPicker(options = {}) {
   return new Promise((resolve) => {
     function finish(value) {
       document.removeEventListener("keydown", onKeydown, true);
+      unsubscribe();
       unlockScroll();
       host.remove();
       previousFocus?.focus?.({ preventScroll: true });
       resolve(value);
     }
-    const decide = () => finish({ style: lib.KEY, config: compact(config), svg: render(config) });
+    const decide = () => finish({ ...editor.value(), svg: editor.preview() });
     const requestClose = () => {
-      if (step === "edit" && dirty) { confirming = true; drawFooter(); $(".ft [data-a=keep]").focus(); }
+      if (step === "edit" && editor.getState().dirty) { confirming = true; drawFooter(); $(".ft [data-a=keep]").focus(); }
       else finish(null);
     };
+    // Every edit redraws the editor view (the editor notifies us).
+    const unsubscribe = editor.subscribe(() => { if (step === "edit") drawEditor(); });
 
     // -------------------------------------------------------------- drawing
     function draw() {
@@ -140,7 +124,7 @@ export function openPicker(options = {}) {
     function drawHeader() {
       $$(".steps span").forEach((s) => s.classList.toggle("on", s.dataset.s === step));
       $$(".libs button").forEach((b) => {
-        const on = b.dataset.lib === lib.KEY;
+        const on = b.dataset.lib === pickStyle;
         b.classList.toggle("on", on);
         b.setAttribute("aria-selected", on);
         b.disabled = step === "edit";
@@ -158,8 +142,10 @@ export function openPicker(options = {}) {
 
     function drawCandidates() {
       $(".bd").innerHTML = `<div class="sc pick"><p class="lead">${esc(text.lead)}</p>
-        <div class="cands" role="listbox" aria-label="${esc(text.candidate)}">${candidates.map((c, i) =>
-          `<button class="cand ${i === selected ? "on" : ""}" role="option" data-i="${i}" aria-selected="${i === selected}" aria-label="${esc(text.candidate)} ${i + 1}${c.tag ? `（${esc(c.tag)}）` : ""}" tabindex="${i === selected ? 0 : -1}">${render(c.config)}${c.tag ? `<span class="tag">${esc(c.tag)}</span>` : ""}</button>`).join("")}</div></div>`;
+        <div class="cands" role="listbox" aria-label="${esc(text.candidate)}">${candidates.map((c, i) => {
+          const tag = c.current ? text.current : "";
+          return `<button class="cand ${i === selected ? "on" : ""}" role="option" data-i="${i}" aria-selected="${i === selected}" aria-label="${esc(text.candidate)} ${i + 1}${tag ? `（${esc(tag)}）` : ""}" tabindex="${i === selected ? 0 : -1}">${c.svg}${tag ? `<span class="tag">${esc(tag)}</span>` : ""}</button>`;
+        }).join("")}</div></div>`;
     }
 
     function selectCandidate(i) {
@@ -176,71 +162,52 @@ export function openPicker(options = {}) {
     function buildEditor() {
       $(".bd").innerHTML = `<div class="edit">
         <div class="pvcol"><div class="pv" aria-live="polite"></div><div class="acts"><button class="btn" data-a="shuffle">${esc(text.shuffle)}</button><button class="btn" data-a="revert">${esc(text.revert)}</button></div></div>
-        <div class="ctl"><div class="groups" role="tablist">${groups().map((g, i) => `<button role="tab" data-g="${i}">${esc(g.label)}</button>`).join("")}</div>
+        <div class="ctl"><div class="groups" role="tablist">${editor.catalog().groups.map((g, i) => `<button role="tab" data-g="${i}">${esc(g.label)}</button>`).join("")}</div>
           <div class="cats"></div><div class="sc edsc"><div class="colors"></div><div class="optwrap"></div></div></div></div>`;
     }
 
     function drawEditor({ resetScroll = false } = {}) {
       if (!$(".edit")) buildEditor();
-      const C = category(cat), parts = lib.PARTS[cat], cats = groups()[group].cats;
-      $(".pv").innerHTML = render(config);
+      const C = editor.catalog(), category = C.categories.find((c) => c.key === cat), cats = C.groups[group].categories;
+      $(".pv").innerHTML = editor.preview();
       $$(".groups button").forEach((b, i) => { b.classList.toggle("on", i === group); b.setAttribute("aria-selected", i === group); });
       $(".cats").innerHTML = cats.length > 1
-        ? cats.map((k) => `<button class="${k === cat ? "on" : ""}" data-c="${k}" aria-pressed="${k === cat}">${esc(category(k).label)}</button>`).join("")
+        ? cats.map((k) => `<button class="${k === cat ? "on" : ""}" data-c="${k}" aria-pressed="${k === cat}">${esc(C.categories.find((c) => c.key === k).label)}</button>`).join("")
         : "";
-      $(".colors").innerHTML = (C.colors || []).map((slot) =>
-        `<div class="crow" role="group" aria-label="${esc(slot.label)}"><span class="lbl">${esc(slot.label)}</span>${slot.palette.map((v) => swatch(slot.key, v)).join("")}` +
-        `<label class="custom" title="${esc(text.customColor)}"><input type="color" aria-label="${esc(slot.label)}：${esc(text.customColor)}" data-ck="${slot.key}" value="${toHex(lib.resolve(config[slot.key] ?? lib.DEFAULTS[slot.key], hue))}"></label></div>`).join("");
-      $(".colors").style.display = C.colors ? "" : "none";
+      $(".colors").innerHTML = category.colors.map((slot) => {
+        const currentColor = editor.color(slot.key);
+        return `<div class="crow" role="group" aria-label="${esc(slot.label)}"><span class="lbl">${esc(slot.label)}</span>${slot.swatches.map((sw) => swatch(slot.key, sw, currentColor.value)).join("")}` +
+          `<label class="custom" title="${esc(text.customColor)}"><input type="color" aria-label="${esc(slot.label)}：${esc(text.customColor)}" data-ck="${slot.key}" value="${toHex(currentColor.hex)}"></label></div>`;
+      }).join("");
+      $(".colors").style.display = category.colors.length ? "" : "none";
 
       const scroller = $(".edsc"), top = resetScroll ? 0 : scroller.scrollTop;
-      $(".optwrap").innerHTML = (C.multi ? `<p class="note">${esc(text.multi)}</p>` : "") + (parts
-        ? `<div class="opts" role="listbox" aria-label="${esc(C.label)}">${parts.map((p) => option(C, p)).join("")}</div>`
+      $(".optwrap").innerHTML = (category.multi ? `<p class="note">${esc(text.multi)}</p>` : "") + (category.parts.length
+        ? `<div class="opts" role="listbox" aria-label="${esc(category.label)}">${category.parts.map((p) => {
+            const on = editor.isSelected(cat, p.id);
+            return `<button class="opt ${on ? "on" : ""}" role="option" data-pid="${p.id}" aria-selected="${on}"><div class="th">${editor.thumbnail(cat, p.id)}</div><span class="nm">${esc(p.label)}</span></button>`;
+          }).join("")}</div>`
         : "");
       scroller.scrollTop = top;
     }
 
-    /** A tile showing the current avatar with this part applied. */
-    function option(C, p) {
-      let on, next;
-      if (C.multi) {
-        const set = new Set(config[C.key] || []);
-        on = set.has(p.id);
-        on ? set.delete(p.id) : set.add(p.id);
-        next = [...set];
-      } else {
-        on = config[C.key] === p.id;
-        next = p.id;
-      }
-      return `<button class="opt ${on ? "on" : ""}" role="option" data-pid="${p.id}" aria-selected="${on}"><div class="th">${render({ ...config, [C.key]: next }, { viewBox: C.view })}</div><span class="nm">${esc(p.label)}</span></button>`;
-    }
-
-    function swatch(key, v) {
-      const on = (config[key] ?? lib.DEFAULTS[key]) === v, theme = v.startsWith("theme"), auto = v === "auto";
-      const name = auto ? text.auto : theme ? text.theme : lib.colorName(v);
-      return `<button class="sw ${on ? "on" : ""} ${theme ? "t" : ""} ${auto ? "auto" : ""}" style="background:${lib.resolve(v, hue)}" data-ck="${key}" data-cv="${v}" title="${esc(name)}" aria-label="${esc(name)}" aria-pressed="${on}"></button>`;
+    function swatch(key, sw, value) {
+      const on = value === sw.value;
+      const name = sw.kind === "auto" ? text.auto : sw.kind === "theme" ? text.theme : sw.name;
+      return `<button class="sw ${on ? "on" : ""} ${sw.kind === "theme" ? "t" : ""} ${sw.kind === "auto" ? "auto" : ""}" style="background:${sw.hex}" data-ck="${key}" data-cv="${sw.value}" title="${esc(name)}" aria-label="${esc(name)}" aria-pressed="${on}"></button>`;
     }
 
     // -------------------------------------------------------------- actions
     const showCategory = (key, g = group) => { group = g; cat = key; drawEditor({ resetScroll: true }); };
-    const edit = (fn) => { fn(); dirty = true; drawEditor(); };
-    const toggleOrSet = (pid) => {
-      if (category(cat).multi) {
-        const set = new Set(config[cat] || []);
-        set.has(pid) ? set.delete(pid) : set.add(pid);
-        config[cat] = [...set];
-      } else config[cat] = pid;
-    };
     function startEditing() {
-      config = clone(candidates[selected].config);
-      original = clone(config);
-      dirty = false;
+      editor.load(candidates[selected].avatar);   // the chosen candidate becomes the baseline
       step = "edit";
-      if (!cat || !category(cat)) { group = 0; cat = groups()[0].cats[0]; }
+      const C = editor.catalog();
+      if (!cat || !C.categories.some((c) => c.key === cat)) { group = 0; cat = C.groups[0].categories[0]; }
       draw();
     }
-    function switchLibrary(key) {
-      lib = libs.find((l) => l.KEY === key);
+    function switchStyle(key) {
+      pickStyle = key;
       page = 0; cat = null; group = 0;
       makeCandidates();
       draw();
@@ -249,23 +216,23 @@ export function openPicker(options = {}) {
     root.addEventListener("click", (e) => {
       const t = e.target.closest("button");
       if (!t || t.disabled) return;
-      const { a, lib: libKey, i, g, c, ck, cv, pid } = t.dataset;
+      const { a, lib: styleKey, i, g, c, ck, cv, pid } = t.dataset;
       if (a === "close") return requestClose();
       if (a === "keep") { confirming = false; return drawFooter(); }
       if (a === "discard") return finish(null);
-      if (libKey && libKey !== lib.KEY) return switchLibrary(libKey);
+      if (styleKey && styleKey !== pickStyle) return switchStyle(styleKey);
       if (i !== undefined) return selectCandidate(+i);
       if (a === "more") { page++; makeCandidates(); drawCandidates(); return $(".cand").focus({ preventScroll: true }); }
       if (a === "custom") return startEditing();
-      if (a === "use") { if (step === "pick") config = clone(candidates[selected].config); return decide(); }
+      if (a === "use") { if (step === "pick") editor.load(candidates[selected].avatar); return decide(); }
       if (a === "back") { step = "pick"; confirming = false; return draw(); }
-      if (a === "shuffle") return edit(() => { config = complete(lib.random(Math.random().toString(36).slice(2))); });
-      if (a === "revert") { config = clone(original); dirty = false; return drawEditor(); }
-      if (g !== undefined) return showCategory(groups()[+g].cats[0], +g);
+      if (a === "shuffle") return editor.randomize();
+      if (a === "revert") return editor.revert();
+      if (g !== undefined) return showCategory(editor.catalog().groups[+g].categories[0], +g);
       if (c) return showCategory(c);
-      if (ck) return edit(() => { config[ck] = cv; });
+      if (ck) return editor.setColor(ck, cv);
       if (pid) {
-        edit(() => toggleOrSet(pid));
+        editor.select(cat, pid);
         $(`.opt[data-pid="${cssEscape(pid)}"]`)?.focus({ preventScroll: true });
       }
     });
@@ -273,18 +240,15 @@ export function openPicker(options = {}) {
       const tile = e.target.closest(".cand");
       if (!tile) return;
       selectCandidate(+tile.dataset.i);
-      config = clone(candidates[selected].config);
+      editor.load(candidates[selected].avatar);
       decide();
     });
-    // Live preview while dragging in the native color picker; full redraw when it closes.
+    // Live preview while dragging in the native color picker; the full update when it closes.
     root.addEventListener("input", (e) => {
       if (e.target.type !== "color") return;
-      config[e.target.dataset.ck] = e.target.value;
-      dirty = true;
-      $(".pv").innerHTML = render(config);
+      $(".pv").innerHTML = editor.swatchPreview(e.target.dataset.ck, e.target.value);
     });
-    root.addEventListener("change", (e) => { if (e.target.type === "color") drawEditor(); });
-
+    root.addEventListener("change", (e) => { if (e.target.type === "color") editor.setColor(e.target.dataset.ck, e.target.value); });
     // -------------------------------------------------------------- keyboard
     function onKeydown(e) {
       if (e.key === "Escape") {

@@ -55,6 +55,36 @@
 - 編集中に閉じようとすると、その場で確認します
 - Shadow DOM の中に描くので、サイトの CSS と干渉しません。スマホでは全画面になります
 
+## 独自の UI を作る
+
+画面は自前で作りたい場合は、UI を持たない層だけを使えます。組み込みのピッカーも、この層の上に作られています。
+
+| 層 | 関数 | 役割 |
+|---|---|---|
+| カタログ | `catalog(style)` | 選べるもの（カテゴリ・パーツ・色の候補・まとめ方）を素の JSON で返す |
+| エディタ | `createEditor(options)` | 選択・色・おまかせ・元に戻す・undo/redo・候補・プレビューと、その状態。変更は `subscribe()` で通知 |
+| 検証 | `validate(avatar)` / `normalize(avatar)` | 外から来た値を検査・修正する。保存前に必ず通す |
+
+```js
+import { createEditor, validate } from "https://cdn.jsdelivr.net/gh/kobesoft-labs/omokage@0/dist/omokage.esm.js";
+
+const editor = createEditor({ value: saved, styles: ["officers", "animals"], seed: user.id });
+editor.subscribe(render);                 // 変更のたびに描き直す
+
+function render() {
+  const C = editor.catalog();             // groups / categories / parts / colors（ただの JSON）
+  preview.innerHTML = editor.preview();
+  // C.categories[i].parts を並べ、タイルには editor.thumbnail(cat, part.id) の SVG を使う
+}
+partButton.onclick = () => editor.select("hair", "bob");
+swatch.onclick = () => editor.setColor("hairColor", "#a9523b");
+saveButton.onclick = () => save(editor.value());   // { style, config }（初期値との差分だけ）
+```
+
+動く例: [demo/custom.html](https://kobesoft-labs.github.io/omokage/demo/custom.html)（ピッカーとは違う、横並びのレイアウトを 100 行ほどで作っています）
+
+**サーバー側で検証するとき**は、[`dist/catalog.json`](dist/catalog.json) に全絵柄の選択肢と検証用スキーマ（キーごとに「パーツ ID の一覧」か「色: `#rrggbb` か許されたトークン」）が入っているので、JavaScript 以外の言語でも同じ検査ができます。
+
 ## ES モジュールで
 
 ```js
@@ -114,8 +144,10 @@ npm run check     # 全パーツの描画・random() の再現性・dist の API
 | パス | 内容 |
 |---|---|
 | `src/core/` | 色・描画の道具・乱数・`defineLibrary()` |
+| `src/registry.js` | 絵柄の登録 |
 | `src/styles/` | 4 つの絵柄（人物は `officers/` に分割） |
-| `src/picker/` | ピッカー |
+| `src/model/` | カタログ・エディタ・検証（UI を持たない層） |
+| `src/picker/` | ピッカー（model の上に作った UI） |
 | `tools/audit.html` | 人物の全パーツが範囲からはみ出さないかの自動検査 |
 | `tools/check.html` | 帽子×髪型・服×首まわりなどの組み合わせ表 |
 

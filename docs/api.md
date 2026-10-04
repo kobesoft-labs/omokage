@@ -3,6 +3,7 @@
 - [読み込み方](#読み込み方)
 - [アバターの値](#アバターの値)
 - [関数](#関数) — `render` / `random` / `openPicker` / `mount` / `mountAll` / `presets` / `toDataURI` / `listStyles` / `getStyle` / `registerStyle`
+- [独自の UI を作る](#独自の-ui-を作る) — `catalog` / `createEditor` / `validate` / `normalize` / `dist/catalog.json`
 - [HTML 属性](#html-属性)
 - [絵柄オブジェクト](#絵柄オブジェクト)
 - [config の中身](#config-の中身)
@@ -98,6 +99,102 @@ img.src = Omokage.toDataURI(Omokage.render(avatar));
 ### `VERSION`
 
 ライブラリのバージョン文字列。
+
+## 独自の UI を作る
+
+画面を自前で作るときは、UI を持たない 3 つの層を使います。組み込みのピッカーもこの層の上に作られているので、同じことができます。動く例は [demo/custom.html](../demo/custom.html)。
+
+### `catalog(style, { hue }?) → object`
+
+その絵柄で選べるものを、関数や DOM を含まない素の JSON で返します。そのままフレームワークに渡したり、API で返したりできます。
+
+```js
+{
+  style: { key: "animals", label: "どうぶつ" },
+  groups: [{ label: "かお", categories: ["head", "eyes", "muzzle", "mouth", "marks"] }, ...],
+  categories: [
+    {
+      key: "ears", label: "みみ", multi: false, view: null,       // view: サムネイル用の切り出し範囲
+      parts: [{ id: "neko", label: "ねこ" }, ...],
+      colors: [{ key: "earColor", label: "みみの外", swatches: [
+        { value: "auto", hex: "#d8d2dc", name: "おまかせ", kind: "auto" },
+        { value: "#f2a65a", hex: "#f2a65a", name: "茶トラ", kind: "color" }, ...] }],
+    }, ...
+  ],
+  defaults: { head: "maru", ... },
+}
+```
+
+`kind` は `color`（ふつうの色）・`theme`（テーマ色に連動。`hex` は `hue` から計算した値）・`auto`（パーツのおすすめ色）。
+
+### `createEditor(options?) → editor`
+
+カスタマイズの状態と操作を持つオブジェクトです。画面はこれの状態を描くだけにします。
+
+| options | 内容 |
+|---|---|
+| `value` | 最初のアバター `{ style, config }`。無ければ seed から作る |
+| `styles` | 選べる絵柄（KEY か絵柄オブジェクト）。初期値はすべて |
+| `seed` | 候補・初期アバターを決める文字列 |
+| `hue` | テーマ色（プレビューと色見本に使う） |
+
+**状態**
+
+| メソッド | 内容 |
+|---|---|
+| `getState()` | `{ style, config, dirty, canUndo, canRedo }`。`config` は初期値を補った完全な形 |
+| `subscribe(fn)` | 変更のたびに `fn(state)` を呼ぶ。戻り値で解除 |
+| `value()` | 保存する値 `{ style, config }`（初期値との差分だけ） |
+| `styles()` / `catalog()` | 選べる絵柄 / いまの絵柄のカタログ |
+| `selected(cat)` / `isSelected(cat, id)` | 選ばれているパーツ |
+| `color(key)` | `{ value, hex }` |
+
+**操作**（どれも変更を通知し、undo できます）
+
+| メソッド | 内容 |
+|---|---|
+| `select(cat, id)` | パーツを選ぶ（複数選べるカテゴリでは付け外し） |
+| `setColor(key, value)` | 色を変える（`#rrggbb` か `"auto"` などのトークン） |
+| `patch(partial)` | 複数の項目をまとめて変える（undo 1 回分） |
+| `setStyle(key, config?)` | 絵柄を変える |
+| `randomize(seed?)` | おまかせ |
+| `revert()` | 最初（`load` した値）に戻す |
+| `undo()` / `redo()` | 取り消し / やり直し（100 回分） |
+| `load(avatar)` | 値を読み込み、それを新しい「最初」にする（dirty が消え、履歴も消える） |
+
+**絵**
+
+| メソッド | 内容 |
+|---|---|
+| `preview(options?)` | いまのアバターの SVG |
+| `thumbnail(cat, id, options?)` | そのパーツに替えた SVG（カテゴリの `view` で切り出し済み）。選択肢のタイルに |
+| `swatchPreview(key, value)` | その色にした SVG（色ピッカーをドラッグ中のプレビューなどに） |
+| `candidates({ style?, page?, count?, include? })` | 候補の `{ avatar, svg, current }[]`。`include` を渡すと先頭に「いまの」として入る |
+
+### `validate(avatar) → { ok, value, errors }` / `normalize(avatar) → avatar`
+
+外から来た値（自前 UI の送信、API のリクエスト、古いデータ）を検査します。知らない項目は捨て、知らないパーツ ID や色の形式違いは初期値に戻し、`value` には安全な値（初期値との差分だけ）が入ります。`normalize` は `value` だけを返し、知らない絵柄のときだけ例外を投げます。
+
+```js
+validate({ style: "yokai", config: { body: "kasa", eyes: "<script>", bodyColor: "red", evil: 1 } });
+// → { ok: false, value: { style: "yokai", config: { body: "kasa" } },
+//     errors: ['unknown eyes "<script>"', 'invalid color bodyColor "red"', 'unknown key "evil"'] }
+```
+
+`complete(style, config)` は初期値を補った完全な config、`compact(style, config)` は差分だけの config、`schemaOf(style)` は検証ルールを返します。
+
+### `dist/catalog.json`
+
+ビルド時に、全絵柄の `catalog()` と `schemaOf()` を 1 つの JSON にして書き出します。PHP など JavaScript 以外のサーバーで同じ検査をするときに使ってください。
+
+```json
+{ "version": "0.3.0", "styles": [ { "style": {...}, "groups": [...], "categories": [...], "defaults": {...},
+  "schema": { "hair": { "type": "part", "ids": ["none", "sides", ...] },
+              "face": { "type": "parts", "ids": [...] },
+              "hatColor": { "type": "color", "tokens": ["theme", "theme-dark", ...] } } } ] }
+```
+
+`part` はいずれか 1 つの ID、`parts` は ID の配列、`color` は `#rrggbb` か `tokens` のどれか、です。
 
 ## HTML 属性
 

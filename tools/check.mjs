@@ -31,8 +31,32 @@ for (const style of omokage.listStyles()) {
   for (const g of style.GROUPS) for (const c of g.cats) assert.ok(CATEGORIES.some((k) => k.key === c), `${KEY}: group "${g.label}" has unknown category ${c}`);
 }
 
+// model layer: catalog is plain JSON, editor round-trips, validate() cleans untrusted input
+for (const style of omokage.listStyles()) {
+  const c = omokage.catalog(style.KEY);
+  assert.equal(JSON.stringify(JSON.parse(JSON.stringify(c))), JSON.stringify(c), `${style.KEY}: catalog is not plain JSON`);
+  for (const g of c.groups) for (const k of g.categories) assert.ok(c.categories.some((x) => x.key === k));
+  const e = omokage.createEditor({ styles: [style.KEY], seed: "check" });
+  const start = e.value();
+  for (const cat of c.categories) {
+    if (cat.parts.length) e.select(cat.key, cat.parts.at(-1).id);
+    for (const slot of cat.colors) e.setColor(slot.key, slot.swatches.at(-1).value);
+  }
+  assert.ok(e.getState().dirty, `${style.KEY}: editor not dirty after edits`);
+  const edited = e.value();
+  assert.deepEqual(omokage.validate(edited), { ok: true, value: edited, errors: [] }, `${style.KEY}: editor produced an invalid avatar`);
+  e.revert();
+  assert.deepEqual(e.value(), start, `${style.KEY}: revert did not restore`);
+  e.undo();
+  assert.deepEqual(e.value(), edited, `${style.KEY}: undo of revert did not restore the edits`);
+  const bad = omokage.validate({ style: style.KEY, config: { nope: 1, [c.categories.find((x) => x.parts.length).key]: "<script>" } });
+  assert.ok(!bad.ok && bad.errors.length === 2 && Object.keys(bad.value.config).length === 0, `${style.KEY}: validate() let bad input through`);
+}
+assert.ok(!omokage.validate({ style: "nope" }).ok);
+
 const bundle = await import("../dist/omokage.esm.js");
-for (const name of ["render", "random", "openPicker", "mount", "mountAll", "listStyles", "getStyle", "registerStyle", "defineLibrary", "presets", "toDataURI"]) {
+for (const name of ["render", "random", "openPicker", "mount", "mountAll", "listStyles", "getStyle", "registerStyle", "defineLibrary", "presets", "toDataURI",
+                    "catalog", "createEditor", "validate", "normalize", "complete", "compact", "schemaOf"]) {
   assert.equal(typeof bundle[name], "function", `dist is missing ${name}()`);
 }
 const noIds = (svg) => svg.replace(/\b(of|yk|an|gm)\d+/g, "$1#");   // each render gets a fresh id

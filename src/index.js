@@ -1,16 +1,20 @@
-// omokage — part-based SVG avatars with a ready-made picker.
+// omokage — part-based SVG avatars.
 //
 // An avatar is stored as a small JSON value: { style: "yokai", config: { body: "kasa", ... } }.
-// Render it whenever you need pixels:
 //
-//   import { render, random, openPicker } from "omokage";
-//   const avatar = random("tanaka", { style: "animals" });
-//   element.innerHTML = render(avatar);
-//   const picked = await openPicker({ value: avatar });   // { style, config, svg } | null
+// The package is layered so each part can be used on its own:
+//   rendering   render(), random(), presets(), mount()             avatar → SVG
+//   model       catalog(), createEditor(), validate(), normalize()  data and state, no DOM
+//   picker      openPicker()                                        a ready-made dialog built on the model
+//   styles      defineLibrary(), registerStyle()                    add your own style
+//
+// Building your own customizer UI? Use catalog() for what to offer and createEditor()
+// for state and actions; validate() whatever comes back before you store it.
 import { Officers } from "./styles/officers/index.js";
 import { Yokai } from "./styles/yokai.js";
 import { Animals } from "./styles/animals.js";
 import { Game } from "./styles/game.js";
+import { registerStyle, listStyles, getStyle, resolveStyles } from "./registry.js";
 import { openPicker as openPickerWith } from "./picker/index.js";
 import { mount as mountInto, mountAll as mountAllIn } from "./mount.js";
 
@@ -18,28 +22,16 @@ export { defineLibrary } from "./core/library.js";
 export * as draw from "./core/draw.js";
 export * as color from "./core/color.js";
 export { Officers, Yokai, Animals, Game };
+export { registerStyle, listStyles, getStyle };
+export { catalog } from "./model/catalog.js";
+export { createEditor } from "./model/editor.js";
+export { validate, normalize, complete, compact, schemaOf } from "./model/avatar.js";
 
 export const VERSION = typeof __VERSION__ === "string" ? __VERSION__ : "dev";
 
-const registry = new Map();
-
-/** Makes a style available to render(), random() and openPicker() by its KEY. */
-export function registerStyle(style) {
-  if (!style || !style.KEY || typeof style.render !== "function") throw new Error("omokage: registerStyle() expects a library made with defineLibrary()");
-  registry.set(style.KEY, style);
-  return style;
-}
 [Officers, Yokai, Animals, Game].forEach(registerStyle);
 
-/** All registered styles, in registration order. */
-export const listStyles = () => [...registry.values()];
-
-/** The style with this KEY. Throws for unknown keys. */
-export function getStyle(key) {
-  const style = registry.get(key);
-  if (!style) throw new Error(`omokage: unknown style "${key}" (available: ${[...registry.keys()].join(", ")})`);
-  return style;
-}
+// ---------------------------------------------------------------- rendering
 
 /**
  * Renders an avatar to an SVG string.
@@ -63,17 +55,18 @@ export function presets(style) {
 /** An SVG string as a data URI, for <img src> or CSS backgrounds. */
 export const toDataURI = (svg) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
-/**
- * Opens the picker dialog. Offers every registered style unless `styles` (keys or
- * libraries) is given. Resolves to { style, config, svg }, or null when cancelled.
- */
-export function openPicker(options = {}) {
-  const styles = (options.styles || listStyles()).map((s) => (typeof s === "string" ? getStyle(s) : s));
-  return openPickerWith({ ...options, styles });
-}
-
 /** Renders an avatar into an element (the SVG fills it). */
 export const mount = (el, avatar, options = {}) => mountInto(el, avatar, options, { render });
 
 /** Renders every [data-omokage] element under `root` (default: the whole document). */
 export const mountAll = (root) => mountAllIn(root, { render, random });
+
+// ---------------------------------------------------------------- picker
+
+/**
+ * Opens the picker dialog. Offers every registered style unless `styles` (keys or
+ * style objects) is given. Resolves to { style, config, svg }, or null when cancelled.
+ */
+export function openPicker(options = {}) {
+  return openPickerWith({ ...options, styles: resolveStyles(options.styles) });
+}

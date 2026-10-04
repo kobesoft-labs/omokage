@@ -1,4 +1,4 @@
-/*! omokage v0.2.0 | BSD-3-Clause | https://github.com/kobesoft-labs/omokage */
+/*! omokage v0.3.0 | BSD-3-Clause | https://github.com/kobesoft-labs/omokage */
 var Omokage = (() => {
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -26,19 +26,26 @@ var Omokage = (() => {
     Officers: () => Officers,
     VERSION: () => VERSION,
     Yokai: () => Yokai,
+    catalog: () => catalog,
     color: () => color_exports,
+    compact: () => compact,
+    complete: () => complete,
+    createEditor: () => createEditor,
     defineLibrary: () => defineLibrary,
     draw: () => draw_exports,
     getStyle: () => getStyle,
     listStyles: () => listStyles,
     mount: () => mount2,
     mountAll: () => mountAll2,
+    normalize: () => normalize,
     openPicker: () => openPicker2,
     presets: () => presets,
     random: () => random,
     registerStyle: () => registerStyle,
     render: () => render,
-    toDataURI: () => toDataURI
+    schemaOf: () => schemaOf,
+    toDataURI: () => toDataURI,
+    validate: () => validate
   });
 
   // src/core/random.js
@@ -2055,6 +2062,24 @@ ${this.layers.join("\n")}
     random: randomAdventurer
   });
 
+  // src/registry.js
+  var registry = /* @__PURE__ */ new Map();
+  function registerStyle(style) {
+    if (!style || !style.KEY || typeof style.render !== "function") {
+      throw new Error("omokage: registerStyle() expects a library made with defineLibrary()");
+    }
+    registry.set(style.KEY, style);
+    return style;
+  }
+  var listStyles = () => [...registry.values()];
+  function getStyle(key) {
+    const style = registry.get(key);
+    if (!style) throw new Error(`omokage: unknown style "${key}" (available: ${[...registry.keys()].join(", ")})`);
+    return style;
+  }
+  var hasStyle = (key) => registry.has(key);
+  var resolveStyles = (list) => (list && list.length ? list : listStyles()).map((s) => typeof s === "string" ? getStyle(s) : s);
+
   // src/picker/styles.js
   var PICKER_CSS = `
 :host { all: initial; }
@@ -2160,6 +2185,209 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
 `;
   var ICON_X = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
 
+  // src/model/avatar.js
+  var same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  var HEX = /^#[0-9a-f]{6}$/i;
+  function schemaOf(style) {
+    const S2 = typeof style === "string" ? getStyle(style) : style;
+    const keys = {};
+    for (const c of S2.CATEGORIES) {
+      if (S2.PARTS[c.key]) keys[c.key] = { type: c.multi ? "parts" : "part", ids: S2.PARTS[c.key].map((p) => p.id) };
+      for (const slot of c.colors || []) keys[slot.key] = { type: "color", tokens: slot.palette.filter((v) => !HEX.test(v)) };
+    }
+    for (const k of Object.keys(S2.DEFAULTS)) if (!keys[k]) keys[k] = { type: "color", tokens: [] };
+    return keys;
+  }
+  var complete = (style, config = {}) => ({ ...getStyle(style).DEFAULTS, ...config });
+  function compact(style, config = {}) {
+    const defaults = getStyle(style).DEFAULTS;
+    return Object.fromEntries(Object.entries(config).filter(([k, v]) => !same(v, defaults[k])));
+  }
+  function validate(avatar) {
+    const errors = [];
+    if (!avatar || typeof avatar !== "object") return { ok: false, value: null, errors: ["avatar must be an object"] };
+    if (!hasStyle(avatar.style)) return { ok: false, value: null, errors: [`unknown style "${avatar.style}"`] };
+    const schema = schemaOf(avatar.style);
+    const input = avatar.config && typeof avatar.config === "object" ? avatar.config : {};
+    const config = {};
+    for (const [key, value] of Object.entries(input)) {
+      const rule = schema[key];
+      if (!rule) {
+        errors.push(`unknown key "${key}"`);
+        continue;
+      }
+      if (rule.type === "part") {
+        if (rule.ids.includes(value)) config[key] = value;
+        else errors.push(`unknown ${key} "${value}"`);
+      } else if (rule.type === "parts") {
+        const list = Array.isArray(value) ? value : [];
+        const kept = [...new Set(list.filter((id) => rule.ids.includes(id)))];
+        if (kept.length !== list.length || !Array.isArray(value)) errors.push(`invalid ${key}`);
+        config[key] = kept;
+      } else if (typeof value === "string" && (HEX.test(value) || rule.tokens.includes(value))) {
+        config[key] = value.toLowerCase();
+      } else errors.push(`invalid color ${key} "${value}"`);
+    }
+    return { ok: errors.length === 0, value: { style: avatar.style, config: compact(avatar.style, config) }, errors };
+  }
+  function normalize(avatar) {
+    const { value, errors } = validate(avatar);
+    if (!value) throw new Error(`omokage: ${errors[0]}`);
+    return value;
+  }
+
+  // src/model/catalog.js
+  var kindOf = (v) => v === "auto" ? "auto" : v.startsWith("theme") ? "theme" : "color";
+  function catalog(style, { hue } = {}) {
+    const S2 = getStyle(style);
+    return {
+      style: { key: S2.KEY, label: S2.LABEL },
+      groups: (S2.GROUPS || [{ label: S2.LABEL, cats: S2.CATEGORIES.map((c) => c.key) }]).map((g) => ({ label: g.label, categories: [...g.cats] })),
+      categories: S2.CATEGORIES.map((c) => ({
+        key: c.key,
+        label: c.label,
+        multi: !!c.multi,
+        view: c.view || null,
+        parts: (S2.PARTS[c.key] || []).map((p) => ({ id: p.id, label: p.label })),
+        colors: (c.colors || []).map((slot) => ({
+          key: slot.key,
+          label: slot.label,
+          swatches: slot.palette.map((value) => ({ value, hex: S2.resolve(value, hue), name: S2.colorName(value), kind: kindOf(value) }))
+        }))
+      })),
+      defaults: JSON.parse(JSON.stringify(S2.DEFAULTS))
+    };
+  }
+
+  // src/model/editor.js
+  var clone = (v) => JSON.parse(JSON.stringify(v));
+  var same2 = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  var HISTORY = 100;
+  function createEditor(options = {}) {
+    const styles = resolveStyles(options.styles);
+    const seed = options.seed || Math.random().toString(36).slice(2, 8);
+    const hue = options.hue;
+    const listeners = /* @__PURE__ */ new Set();
+    const start = options.value && styles.some((s) => s.KEY === options.value.style) ? normalize(options.value) : { style: styles[0].KEY, config: styles[0].random(seed) };
+    let state = { style: start.style, config: complete(start.style, start.config) };
+    let baseline = clone(state);
+    let past = [], future = [];
+    const emit = () => {
+      const s = editor.getState();
+      for (const fn of listeners) fn(s);
+    };
+    const commit = (next, { record = true } = {}) => {
+      if (same2(next, state)) return;
+      if (record) {
+        past.push(state);
+        if (past.length > HISTORY) past.shift();
+        future = [];
+      }
+      state = next;
+      emit();
+    };
+    const lib = () => getStyle(state.style);
+    const isMulti = (cat) => !!lib().CATEGORIES.find((c) => c.key === cat)?.multi;
+    const editor = {
+      /** { style, config (complete), dirty, canUndo, canRedo } */
+      getState: () => ({ style: state.style, config: clone(state.config), dirty: !same2(state, baseline), canUndo: past.length > 0, canRedo: future.length > 0 }),
+      /** Calls `fn(state)` after every change. Returns an unsubscribe function. */
+      subscribe(fn) {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+      /** The styles on offer: [{ key, label }]. */
+      styles: () => styles.map((s) => ({ key: s.KEY, label: s.LABEL })),
+      /** What the current style offers (see catalog()). */
+      catalog: () => catalog(state.style, { hue }),
+      // ------------------------------------------------------------ reading
+      /** The selected part id (or ids, for multi categories) of a category. */
+      selected: (cat) => clone(state.config[cat]),
+      isSelected: (cat, id) => [].concat(state.config[cat] ?? []).includes(id),
+      /** A color slot: { value, hex }. */
+      color: (key) => ({ value: state.config[key], hex: lib().resolve(state.config[key], hue) }),
+      /** The avatar to store: { style, config } with only non-default keys. */
+      value: () => ({ style: state.style, config: compact(state.style, state.config) }),
+      // ------------------------------------------------------------ editing
+      /** Selects a part. In multi categories this toggles it. */
+      select(cat, id) {
+        const value = isMulti(cat) ? editor.isSelected(cat, id) ? state.config[cat].filter((x) => x !== id) : [...state.config[cat] || [], id] : id;
+        commit({ ...state, config: { ...state.config, [cat]: value } });
+      },
+      /** Sets a color slot to a hex color or a palette token ("auto", "theme", …). */
+      setColor(key, value) {
+        commit({ ...state, config: { ...state.config, [key]: value } });
+      },
+      /** Sets several config keys at once (one undo step). */
+      patch(partial) {
+        commit({ ...state, config: { ...state.config, ...partial } });
+      },
+      /** Switches style. Starts from a seeded avatar of that style unless `config` is given. */
+      setStyle(key, config) {
+        if (!styles.some((s) => s.KEY === key)) throw new Error(`omokage: style "${key}" is not offered by this editor`);
+        commit({ style: key, config: complete(key, config || getStyle(key).random(`${seed}:${key}`)) });
+      },
+      /** Replaces the whole avatar with a random one of the current style. */
+      randomize(by = Math.random().toString(36).slice(2)) {
+        commit({ ...state, config: complete(state.style, lib().random(by)) });
+      },
+      /** Loads an avatar and makes it the new baseline (no longer dirty, history cleared). */
+      load(avatar) {
+        const v = normalize(avatar);
+        state = { style: v.style, config: complete(v.style, v.config) };
+        baseline = clone(state);
+        past = [];
+        future = [];
+        emit();
+      },
+      /** Goes back to the baseline (the loaded avatar). Undoable. */
+      revert() {
+        commit(clone(baseline));
+      },
+      undo() {
+        if (!past.length) return;
+        future.push(state);
+        state = past.pop();
+        emit();
+      },
+      redo() {
+        if (!future.length) return;
+        past.push(state);
+        state = future.pop();
+        emit();
+      },
+      // ------------------------------------------------------------ pictures
+      /** The current avatar as SVG. */
+      preview: (renderOptions = {}) => lib().render(state.config, { hue, ...renderOptions }),
+      /** The current avatar with one part swapped in, framed on that category — for option tiles. */
+      thumbnail(cat, id, renderOptions = {}) {
+        const C2 = lib().CATEGORIES.find((c) => c.key === cat);
+        const value = C2?.multi ? editor.isSelected(cat, id) ? state.config[cat] : [...state.config[cat] || [], id] : id;
+        return lib().render({ ...state.config, [cat]: value }, { hue, viewBox: C2?.view || void 0, ...renderOptions });
+      },
+      /** A color swatch preview: the current avatar with this color applied. */
+      swatchPreview: (key, value, renderOptions = {}) => lib().render({ ...state.config, [key]: value }, { hue, ...renderOptions }),
+      /**
+       * Seeded candidates of a style (default: the current one), e.g. for a "pick one" grid.
+       * `include` puts an avatar first (marked current: true); duplicates are skipped.
+       * @returns {{ avatar: {style, config}, svg: string, current: boolean }[]}
+       */
+      candidates({ style = state.style, page = 0, count = 12, include = null } = {}) {
+        const S2 = getStyle(style), list = [], seen = /* @__PURE__ */ new Set();
+        const push = (config, current) => {
+          const full = complete(style, config), key = JSON.stringify(full);
+          if (seen.has(key)) return;
+          seen.add(key);
+          list.push({ avatar: { style, config: compact(style, full) }, svg: S2.render(full, { hue }), current });
+        };
+        if (include && include.style === style && page === 0) push(normalize(include).config, true);
+        for (let i = 0; list.length < count && i < count * 4; i++) push(S2.random(`${seed}:${style}:${page}:${i}`), false);
+        return list;
+      }
+    };
+    return editor;
+  }
+
   // src/picker/index.js
   var CANDIDATES = 12;
   var TEXT = {
@@ -2187,8 +2415,6 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
     discard: "\u9589\u3058\u308B"
   };
   var esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  var clone = (v) => JSON.parse(JSON.stringify(v));
-  var same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   var toHex2 = (c) => /^#[0-9a-f]{6}$/i.test(c) ? c : "#888888";
   var cssEscape = (s) => globalThis.CSS && CSS.escape ? CSS.escape(s) : s;
   function lockPageScroll() {
@@ -2203,44 +2429,24 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
     };
   }
   function openPicker(options = {}) {
-    const libs = [].concat(options.styles || []).filter(Boolean);
-    if (!libs.length) throw new Error("omokage: openPicker() needs at least one style in `styles`");
     const text = { ...TEXT, ...options.text };
-    const { hue } = options;
-    const seed = options.seed || Math.random().toString(36).slice(2, 8);
     const current = options.value && options.value.config ? options.value : null;
-    const startLib = libs.find((l) => l.KEY === current?.style) || libs[0];
-    let lib = startLib;
+    const editor = createEditor({ styles: options.styles, value: current, hue: options.hue, seed: options.seed });
+    const styles = editor.styles();
     let step = "pick";
-    let page = 0, candidates = [], selected = 0;
-    let config = null, original = null, dirty = false, confirming = false;
-    let group = 0, cat = null;
-    const groups = () => lib.GROUPS || [{ label: "\u30D1\u30FC\u30C4", cats: lib.CATEGORIES.map((c) => c.key) }];
-    const category = (key) => lib.CATEGORIES.find((c) => c.key === key);
-    const render2 = (c, extra) => lib.render(c, { hue, ...extra });
-    const complete = (c) => ({ ...lib.DEFAULTS, ...c });
-    const compact = (c) => Object.fromEntries(Object.entries(c).filter(([k, v]) => !same(v, lib.DEFAULTS[k])));
-    function makeCandidates() {
-      const list = [];
-      if (current && page === 0 && lib.KEY === current.style) list.push({ config: complete(current.config), tag: text.current });
-      const seen = new Set(list.map((c) => JSON.stringify(c.config)));
-      for (let i = 0; list.length < CANDIDATES && i < CANDIDATES * 4; i++) {
-        const c = complete(lib.random(`${seed}:${lib.KEY}:${page}:${i}`)), key = JSON.stringify(c);
-        if (!seen.has(key)) {
-          seen.add(key);
-          list.push({ config: c });
-        }
-      }
-      candidates = list;
+    let pickStyle = editor.getState().style, page = 0, candidates = [], selected = 0;
+    let confirming = false, group = 0, cat = null;
+    const makeCandidates = () => {
+      candidates = editor.candidates({ style: pickStyle, page, count: CANDIDATES, include: current });
       selected = 0;
-    }
+    };
     makeCandidates();
     const host = document.createElement("div");
     host.setAttribute("data-omokage-picker", "");
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<style>${PICKER_CSS}</style><div class="ov"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="t" tabindex="-1">
     <div class="hd"><h2 id="t">${esc(options.title || text.title)}</h2><span class="gap"></span>
-      ${libs.length > 1 ? `<div class="libs" role="tablist" aria-label="${esc(text.styleTabs)}">${libs.map((l) => `<button role="tab" data-lib="${l.KEY}">${esc(l.LABEL || l.KEY)}</button>`).join("")}</div>` : ""}
+      ${styles.length > 1 ? `<div class="libs" role="tablist" aria-label="${esc(text.styleTabs)}">${styles.map((s) => `<button role="tab" data-lib="${s.key}">${esc(s.label)}</button>`).join("")}</div>` : ""}
       <div class="steps" aria-hidden="true"><span data-s="pick">${esc(text.stepPick)}</span><span data-s="edit">${esc(text.stepEdit)}</span></div>
       <button class="x" aria-label="${esc(text.close)}" data-a="close">${ICON_X}</button></div>
     <div class="bd"></div><div class="ft"></div></div></div>`;
@@ -2252,19 +2458,23 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
     return new Promise((resolve) => {
       function finish(value) {
         document.removeEventListener("keydown", onKeydown, true);
+        unsubscribe();
         unlockScroll();
         host.remove();
         previousFocus?.focus?.({ preventScroll: true });
         resolve(value);
       }
-      const decide = () => finish({ style: lib.KEY, config: compact(config), svg: render2(config) });
+      const decide = () => finish({ ...editor.value(), svg: editor.preview() });
       const requestClose = () => {
-        if (step === "edit" && dirty) {
+        if (step === "edit" && editor.getState().dirty) {
           confirming = true;
           drawFooter();
           $(".ft [data-a=keep]").focus();
         } else finish(null);
       };
+      const unsubscribe = editor.subscribe(() => {
+        if (step === "edit") drawEditor();
+      });
       function draw() {
         drawHeader();
         drawFooter();
@@ -2273,7 +2483,7 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
       function drawHeader() {
         $$(".steps span").forEach((s) => s.classList.toggle("on", s.dataset.s === step));
         $$(".libs button").forEach((b) => {
-          const on = b.dataset.lib === lib.KEY;
+          const on = b.dataset.lib === pickStyle;
           b.classList.toggle("on", on);
           b.setAttribute("aria-selected", on);
           b.disabled = step === "edit";
@@ -2284,7 +2494,10 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
       }
       function drawCandidates() {
         $(".bd").innerHTML = `<div class="sc pick"><p class="lead">${esc(text.lead)}</p>
-        <div class="cands" role="listbox" aria-label="${esc(text.candidate)}">${candidates.map((c, i) => `<button class="cand ${i === selected ? "on" : ""}" role="option" data-i="${i}" aria-selected="${i === selected}" aria-label="${esc(text.candidate)} ${i + 1}${c.tag ? `\uFF08${esc(c.tag)}\uFF09` : ""}" tabindex="${i === selected ? 0 : -1}">${render2(c.config)}${c.tag ? `<span class="tag">${esc(c.tag)}</span>` : ""}</button>`).join("")}</div></div>`;
+        <div class="cands" role="listbox" aria-label="${esc(text.candidate)}">${candidates.map((c, i) => {
+          const tag = c.current ? text.current : "";
+          return `<button class="cand ${i === selected ? "on" : ""}" role="option" data-i="${i}" aria-selected="${i === selected}" aria-label="${esc(text.candidate)} ${i + 1}${tag ? `\uFF08${esc(tag)}\uFF09` : ""}" tabindex="${i === selected ? 0 : -1}">${c.svg}${tag ? `<span class="tag">${esc(tag)}</span>` : ""}</button>`;
+        }).join("")}</div></div>`;
       }
       function selectCandidate(i) {
         selected = i;
@@ -2298,72 +2511,52 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
       function buildEditor() {
         $(".bd").innerHTML = `<div class="edit">
         <div class="pvcol"><div class="pv" aria-live="polite"></div><div class="acts"><button class="btn" data-a="shuffle">${esc(text.shuffle)}</button><button class="btn" data-a="revert">${esc(text.revert)}</button></div></div>
-        <div class="ctl"><div class="groups" role="tablist">${groups().map((g, i) => `<button role="tab" data-g="${i}">${esc(g.label)}</button>`).join("")}</div>
+        <div class="ctl"><div class="groups" role="tablist">${editor.catalog().groups.map((g, i) => `<button role="tab" data-g="${i}">${esc(g.label)}</button>`).join("")}</div>
           <div class="cats"></div><div class="sc edsc"><div class="colors"></div><div class="optwrap"></div></div></div></div>`;
       }
       function drawEditor({ resetScroll = false } = {}) {
         if (!$(".edit")) buildEditor();
-        const C2 = category(cat), parts = lib.PARTS[cat], cats = groups()[group].cats;
-        $(".pv").innerHTML = render2(config);
+        const C2 = editor.catalog(), category = C2.categories.find((c) => c.key === cat), cats = C2.groups[group].categories;
+        $(".pv").innerHTML = editor.preview();
         $$(".groups button").forEach((b, i) => {
           b.classList.toggle("on", i === group);
           b.setAttribute("aria-selected", i === group);
         });
-        $(".cats").innerHTML = cats.length > 1 ? cats.map((k) => `<button class="${k === cat ? "on" : ""}" data-c="${k}" aria-pressed="${k === cat}">${esc(category(k).label)}</button>`).join("") : "";
-        $(".colors").innerHTML = (C2.colors || []).map((slot) => `<div class="crow" role="group" aria-label="${esc(slot.label)}"><span class="lbl">${esc(slot.label)}</span>${slot.palette.map((v) => swatch(slot.key, v)).join("")}<label class="custom" title="${esc(text.customColor)}"><input type="color" aria-label="${esc(slot.label)}\uFF1A${esc(text.customColor)}" data-ck="${slot.key}" value="${toHex2(lib.resolve(config[slot.key] ?? lib.DEFAULTS[slot.key], hue))}"></label></div>`).join("");
-        $(".colors").style.display = C2.colors ? "" : "none";
+        $(".cats").innerHTML = cats.length > 1 ? cats.map((k) => `<button class="${k === cat ? "on" : ""}" data-c="${k}" aria-pressed="${k === cat}">${esc(C2.categories.find((c) => c.key === k).label)}</button>`).join("") : "";
+        $(".colors").innerHTML = category.colors.map((slot) => {
+          const currentColor = editor.color(slot.key);
+          return `<div class="crow" role="group" aria-label="${esc(slot.label)}"><span class="lbl">${esc(slot.label)}</span>${slot.swatches.map((sw) => swatch(slot.key, sw, currentColor.value)).join("")}<label class="custom" title="${esc(text.customColor)}"><input type="color" aria-label="${esc(slot.label)}\uFF1A${esc(text.customColor)}" data-ck="${slot.key}" value="${toHex2(currentColor.hex)}"></label></div>`;
+        }).join("");
+        $(".colors").style.display = category.colors.length ? "" : "none";
         const scroller = $(".edsc"), top = resetScroll ? 0 : scroller.scrollTop;
-        $(".optwrap").innerHTML = (C2.multi ? `<p class="note">${esc(text.multi)}</p>` : "") + (parts ? `<div class="opts" role="listbox" aria-label="${esc(C2.label)}">${parts.map((p) => option(C2, p)).join("")}</div>` : "");
+        $(".optwrap").innerHTML = (category.multi ? `<p class="note">${esc(text.multi)}</p>` : "") + (category.parts.length ? `<div class="opts" role="listbox" aria-label="${esc(category.label)}">${category.parts.map((p) => {
+          const on = editor.isSelected(cat, p.id);
+          return `<button class="opt ${on ? "on" : ""}" role="option" data-pid="${p.id}" aria-selected="${on}"><div class="th">${editor.thumbnail(cat, p.id)}</div><span class="nm">${esc(p.label)}</span></button>`;
+        }).join("")}</div>` : "");
         scroller.scrollTop = top;
       }
-      function option(C2, p) {
-        let on, next;
-        if (C2.multi) {
-          const set = new Set(config[C2.key] || []);
-          on = set.has(p.id);
-          on ? set.delete(p.id) : set.add(p.id);
-          next = [...set];
-        } else {
-          on = config[C2.key] === p.id;
-          next = p.id;
-        }
-        return `<button class="opt ${on ? "on" : ""}" role="option" data-pid="${p.id}" aria-selected="${on}"><div class="th">${render2({ ...config, [C2.key]: next }, { viewBox: C2.view })}</div><span class="nm">${esc(p.label)}</span></button>`;
-      }
-      function swatch(key, v) {
-        const on = (config[key] ?? lib.DEFAULTS[key]) === v, theme = v.startsWith("theme"), auto = v === "auto";
-        const name = auto ? text.auto : theme ? text.theme : lib.colorName(v);
-        return `<button class="sw ${on ? "on" : ""} ${theme ? "t" : ""} ${auto ? "auto" : ""}" style="background:${lib.resolve(v, hue)}" data-ck="${key}" data-cv="${v}" title="${esc(name)}" aria-label="${esc(name)}" aria-pressed="${on}"></button>`;
+      function swatch(key, sw, value) {
+        const on = value === sw.value;
+        const name = sw.kind === "auto" ? text.auto : sw.kind === "theme" ? text.theme : sw.name;
+        return `<button class="sw ${on ? "on" : ""} ${sw.kind === "theme" ? "t" : ""} ${sw.kind === "auto" ? "auto" : ""}" style="background:${sw.hex}" data-ck="${key}" data-cv="${sw.value}" title="${esc(name)}" aria-label="${esc(name)}" aria-pressed="${on}"></button>`;
       }
       const showCategory = (key, g = group) => {
         group = g;
         cat = key;
         drawEditor({ resetScroll: true });
       };
-      const edit = (fn) => {
-        fn();
-        dirty = true;
-        drawEditor();
-      };
-      const toggleOrSet = (pid) => {
-        if (category(cat).multi) {
-          const set = new Set(config[cat] || []);
-          set.has(pid) ? set.delete(pid) : set.add(pid);
-          config[cat] = [...set];
-        } else config[cat] = pid;
-      };
       function startEditing() {
-        config = clone(candidates[selected].config);
-        original = clone(config);
-        dirty = false;
+        editor.load(candidates[selected].avatar);
         step = "edit";
-        if (!cat || !category(cat)) {
+        const C2 = editor.catalog();
+        if (!cat || !C2.categories.some((c) => c.key === cat)) {
           group = 0;
-          cat = groups()[0].cats[0];
+          cat = C2.groups[0].categories[0];
         }
         draw();
       }
-      function switchLibrary(key) {
-        lib = libs.find((l) => l.KEY === key);
+      function switchStyle(key) {
+        pickStyle = key;
         page = 0;
         cat = null;
         group = 0;
@@ -2373,14 +2566,14 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
       root.addEventListener("click", (e) => {
         const t = e.target.closest("button");
         if (!t || t.disabled) return;
-        const { a, lib: libKey, i, g, c, ck, cv, pid } = t.dataset;
+        const { a, lib: styleKey, i, g, c, ck, cv, pid } = t.dataset;
         if (a === "close") return requestClose();
         if (a === "keep") {
           confirming = false;
           return drawFooter();
         }
         if (a === "discard") return finish(null);
-        if (libKey && libKey !== lib.KEY) return switchLibrary(libKey);
+        if (styleKey && styleKey !== pickStyle) return switchStyle(styleKey);
         if (i !== void 0) return selectCandidate(+i);
         if (a === "more") {
           page++;
@@ -2390,7 +2583,7 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
         }
         if (a === "custom") return startEditing();
         if (a === "use") {
-          if (step === "pick") config = clone(candidates[selected].config);
+          if (step === "pick") editor.load(candidates[selected].avatar);
           return decide();
         }
         if (a === "back") {
@@ -2398,21 +2591,13 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
           confirming = false;
           return draw();
         }
-        if (a === "shuffle") return edit(() => {
-          config = complete(lib.random(Math.random().toString(36).slice(2)));
-        });
-        if (a === "revert") {
-          config = clone(original);
-          dirty = false;
-          return drawEditor();
-        }
-        if (g !== void 0) return showCategory(groups()[+g].cats[0], +g);
+        if (a === "shuffle") return editor.randomize();
+        if (a === "revert") return editor.revert();
+        if (g !== void 0) return showCategory(editor.catalog().groups[+g].categories[0], +g);
         if (c) return showCategory(c);
-        if (ck) return edit(() => {
-          config[ck] = cv;
-        });
+        if (ck) return editor.setColor(ck, cv);
         if (pid) {
-          edit(() => toggleOrSet(pid));
+          editor.select(cat, pid);
           $(`.opt[data-pid="${cssEscape(pid)}"]`)?.focus({ preventScroll: true });
         }
       });
@@ -2420,17 +2605,15 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
         const tile = e.target.closest(".cand");
         if (!tile) return;
         selectCandidate(+tile.dataset.i);
-        config = clone(candidates[selected].config);
+        editor.load(candidates[selected].avatar);
         decide();
       });
       root.addEventListener("input", (e) => {
         if (e.target.type !== "color") return;
-        config[e.target.dataset.ck] = e.target.value;
-        dirty = true;
-        $(".pv").innerHTML = render2(config);
+        $(".pv").innerHTML = editor.swatchPreview(e.target.dataset.ck, e.target.value);
       });
       root.addEventListener("change", (e) => {
-        if (e.target.type === "color") drawEditor();
+        if (e.target.type === "color") editor.setColor(e.target.dataset.ck, e.target.value);
       });
       function onKeydown(e) {
         if (e.key === "Escape") {
@@ -2509,20 +2692,8 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
   }
 
   // src/index.js
-  var VERSION = true ? "0.2.0" : "dev";
-  var registry = /* @__PURE__ */ new Map();
-  function registerStyle(style) {
-    if (!style || !style.KEY || typeof style.render !== "function") throw new Error("omokage: registerStyle() expects a library made with defineLibrary()");
-    registry.set(style.KEY, style);
-    return style;
-  }
+  var VERSION = true ? "0.3.0" : "dev";
   [Officers, Yokai, Animals, Game].forEach(registerStyle);
-  var listStyles = () => [...registry.values()];
-  function getStyle(key) {
-    const style = registry.get(key);
-    if (!style) throw new Error(`omokage: unknown style "${key}" (available: ${[...registry.keys()].join(", ")})`);
-    return style;
-  }
   function render(avatar, options = {}) {
     return getStyle(avatar.style).render(avatar.config || {}, options);
   }
@@ -2533,12 +2704,11 @@ button:focus-visible, .sw:focus-visible, .opt:focus-visible, .cand:focus-visible
     return getStyle(style).PRESETS.map(({ label, ...config }) => ({ label, avatar: { style, config } }));
   }
   var toDataURI = (svg) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  function openPicker2(options = {}) {
-    const styles = (options.styles || listStyles()).map((s) => typeof s === "string" ? getStyle(s) : s);
-    return openPicker({ ...options, styles });
-  }
   var mount2 = (el, avatar, options = {}) => mount(el, avatar, options, { render });
   var mountAll2 = (root) => mountAll(root, { render, random });
+  function openPicker2(options = {}) {
+    return openPicker({ ...options, styles: resolveStyles(options.styles) });
+  }
 
   // src/browser.js
   if (typeof document !== "undefined") {
